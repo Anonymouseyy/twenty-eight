@@ -7,3 +7,14 @@
     background-color: #292929;
     margin: 0px;
 }
+
+h2 {
+    position: fixed;
+    color: white;
+    font-size: 2rem;
+    font-weight: 2rem;
+    margin: 0px;
+    top: 0;
+    left: 0;
+    padding: 5px;
+}
