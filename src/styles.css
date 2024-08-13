@@ -21,21 +21,52 @@
     filter: drop-shadow(5px 5px 10px #000000);
 }
 
-input {
-    border-radius: 0.5rem;
-    padding: 0.5rem;
-    font-size: 2rem;
-}
-
-button {
-    border-radius: 0.5rem;
-    padding: 0.5rem;
-    font-size: 2rem;
-}
-
-h1 {
+.container > h1 {
     color: white;
     font-size: 5rem;
     font-weight: 2rem;
     margin: 0px;
+}
+
+h2 {
+    position: fixed;
+    color: white;
+    font-size: 2rem;
+    font-weight: 2rem;
+    margin: 0px;
+    top: 0;
+    left: 0;
+    padding: 5px;
+}
+
+.container > input {
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    font-size: 2rem;
+}
+
+.container > button {
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    font-size: 2rem;
+}
+
+.container > ul {
+    list-style-type: none;
+    color: white;
+    padding-left: 0;
+    margin: 0;
+    font-size: 1.5rem;
+    background-color: #246bad;
+    padding: 0.5rem;
+    border-radius: 1rem;
+    width: 50%;
+}
+
+.me {
+    color: #fff200;
+}
+
+.hidden {
+    display: none;
 }
