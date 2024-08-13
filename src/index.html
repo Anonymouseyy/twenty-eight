@@ -10,7 +10,7 @@
     </head>
 
     <body class="body-content">
-        <div class="container">
+        <div class="container" id="start">
             <h1>28</h1>
             <input type="text" placeholder="Name" id="name"/>
             <input type="text" placeholder="Room Code" id="code"/>
@@ -18,13 +18,10 @@
             <button id="create">Create Room</button>
         </div>
 
-        <h2 hidden>Room Code: 6PYX1</h2>
-        <div class="container hidden">
+        <h2 class="hidden" id="roomCode">Room Code: 6PYX1</h2>
+        <div class="container hidden" id="lobby">
             <h1>28</h1>
-            <ul>
-                <li class="me">person 1</li>
-                <li>person 2</li>
-                <li>person 3</li>
+            <ul id="playerList">
             </ul>
             <button>Start Game</button>
             <button>Leave Game</button>
@@ -57,15 +54,18 @@
 
         const db = getDatabase();
 
-
         var name = document.querySelector("#name");
         var code = document.querySelector("#code");
   
         var joinBtn = document.querySelector("#join");
         var createBtn = document.querySelector("#create");
 
+        var room;
+        var playerID;
+
+        var players;
+
         function createRoom() {
-            console.log("buttons clicked")
             const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             let roomID = "";
             const charactersLength = characters.length;
@@ -102,12 +102,89 @@
             })
             .then(()=>{
                 console.log("Room Created");
+
+                room = roomID;
+                playerID = 0;
+
+                document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
+                document.getElementById("start").classList.add("hidden");
+                document.getElementById("roomCode").classList.remove("hidden");
+                document.getElementById("lobby").classList.remove("hidden");
+
+                var ul = document.getElementById("playerList");
+                var li = document.createElement("li");
+                li.appendChild(document.createTextNode(name.value));
+                li.setAttribute("id", "0");
+                ul.appendChild(li);
+                li.classList.add("me");
             })
             .catch((error)=>{
                 alert(error);
             });
         }
 
+        function joinRoom() {
+            const dbref = ref(db);
+
+            if (code.value == "") {
+                alert("Please enter a code");
+                return;
+            }
+
+            get(child(dbref, "rooms/" + code.value))
+            .then((snapshot)=>{
+                if(snapshot.exists()){
+                    var data = snapshot.val();
+
+                    for (var i = 0; i < data.players.length; i++) {
+                        if (data.player[i].name == name.value) {
+                            alert("Someone in room has the same name");
+                            return;
+                        }
+                    }
+
+                    room = code.value;
+                    playerID = data.players.length;
+                    data.players.push({
+                        name: name.value,
+                    })
+
+                    document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
+                    document.getElementById("start").classList.add("hidden");
+                    document.getElementById("roomCode").classList.remove("hidden");
+                    document.getElementById("lobby").classList.remove("hidden");
+
+                    update(ref(db, "rooms/" + room, {
+                        players: data.players
+                    }))
+                    .then(()=>{
+                        alert("Data updated successfully");
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+
+                    var ul = document.getElementById("playerList");
+                    for (var i = 0; i < playerID; i++) {
+                        var li = document.createElement("li");
+                        li.appendChild(document.createTextNode(data.players[i].name));
+                        li.setAttribute("id", `${i}`);
+                        ul.appendChild(li);
+
+                        if (i == playerID) {
+                            li.classList.add("me");
+                        }
+                    }
+                } else {
+                    alert("No room with entered code");
+                }
+            })
+            .catch((error)=>{
+                alert(error)
+            })
+        }
+
         createBtn.addEventListener("click", createRoom);
+        joinBtn.addEventListener("click", joinRoom);
     </script>
 </html>
