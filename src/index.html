@@ -71,7 +71,7 @@
         var started = false;
         var listeners = [];
         var players;
-        var hand = ["A spade", "A heart", "J club"]
+        var hand = [];
 
         function reset() {
             room = null;
@@ -115,14 +115,48 @@
             }
         }
 
-        function startUpdate(snapshot) {
+        async function startUpdate(snapshot) {
             started = snapshot.val();
 
             if (started == true) {
                 document.getElementById("lobby").classList.add("hidden");
                 document.getElementById("playingTable").classList.remove("hidden");
+                const dbref = ref(db);
+                var newHand = [];
 
-                drawCards();
+                await get(child(dbref, "rooms/" + room))
+                .then((snapshot) => {
+                    if(snapshot.exists()){
+                        var data = snapshot.val();
+
+                        for (let i = 0; i < 4; i++) {
+                            const idx = Math.floor(Math.random() * data.cards.length);
+                            const card = data.cards[idx];
+
+                            data.cards.splice(idx, 1);
+                            newHand.push(card);
+                        }
+
+                        hand = [...newHand];
+                        data.players[playerID].cards = hand;
+
+                        update(ref(db, "rooms/" + room), {
+                            cards: data.cards,
+                            players: data.players,
+                        })
+                        .catch((error)=>{
+                            alert(error);
+                        });
+
+                        drawCards();
+                    } else {
+                        alert("Room does not exist");
+                        leaveRoom();
+                    }
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
             } else {
                 document.getElementById("lobby").classList.remove("hidden");
                 document.getElementById("playingTable").classList.add("hidden");
@@ -138,7 +172,7 @@
                 roomID += characters.charAt(Math.floor(Math.random() * charactersLength));
             }
 
-            const suits = ['Spades', 'Hearts', 'Diamonds', 'Clubs'];
+            const suits = ['spade', 'heart', 'diamond', 'club'];
             const ranks = ['A', 'K', 'Q', 'J', '10', '9'];
             const cards = {};
             let index = 0;
@@ -155,7 +189,7 @@
             set(ref(db, "rooms/" + roomID),{
                 players: {
                     [playerID]: {
-                        points: 0,
+                        chips: 0,
                     }
                 },
                 turn: "",
@@ -318,11 +352,13 @@
         function drawCards() {
             var playingTable = document.getElementById("playingTable");
 
-            for (const card of hand) {
-                var info = card.split(" ");
+            for (var i = 0; i < hand.length; i++) {
+                var card = hand[i];
+                var [value, suit] = card.split(" ");
                 var cardDiv = document.createElement('div');
-                cardDiv.setAttribute("data-suit", info[1]);
-                cardDiv.setAttribute("data-value", info[0]);
+
+                cardDiv.setAttribute("data-suit", suit);
+                cardDiv.setAttribute("data-value", value);
                 cardDiv.classList.add("card")
 
                 playingTable.appendChild(cardDiv);

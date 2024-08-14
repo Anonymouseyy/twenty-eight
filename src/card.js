@@ -1,7 +1,3 @@
-const cards = document.querySelectorAll(".card")
-
-cards.forEach(addCardElements)
-
 function addCardElements(card) {
   const value = card.dataset.value
   // const suit = card.dataset.suit
@@ -32,3 +28,8 @@ function createPip() {
   pip.classList.add("pip")
   return pip
 }
+
+setInterval(function () {
+  var cards = document.querySelectorAll(".card")
+  cards.forEach(addCardElements)
+}, 500);
