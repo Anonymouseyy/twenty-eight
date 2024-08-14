@@ -23,8 +23,8 @@
             <h1>28</h1>
             <ul id="playerList">
             </ul>
-            <button>Start Game</button>
-            <button>Leave Game</button>
+            <button id="start">Start Game</button>
+            <button id="leave">Leave Game</button>
         </div>
     </body>
 
@@ -54,16 +54,38 @@
 
         const db = getDatabase();
 
-        var name = document.querySelector("#name");
-        var code = document.querySelector("#code");
+        var nameIn = document.querySelector("#name");
+        var codeIn = document.querySelector("#code");
   
         var joinBtn = document.querySelector("#join");
         var createBtn = document.querySelector("#create");
+        var leaveBtn = document.querySelector("#leave");
+        var startBtn = document.querySelector("#start");
 
         var room;
         var playerID;
+        var started = false;
 
         var players;
+
+        function reset() {
+            room = null;
+            playerID = null;
+            started = false;
+            players = null;
+
+            document.getElementById("start").classList.remove("hidden");
+            document.getElementById("roomCode").classList.add("hidden");
+            document.getElementById("lobby").classList.add("hidden");
+
+            var ul = document.getElementById("playerList");
+
+            while(ul.firstChild) {
+                ul.removeChild(ul.firstChild);
+            }
+            
+            db.off();
+        }
 
         function createRoom() {
             const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -86,13 +108,15 @@
                 }
             }
 
+            playerID = nameIn.value;
+
             set(ref(db, "rooms/" + roomID),{
                 players: {
-                    0: {
-                        name: name.value,
+                    [playerID]: {
+                        points: 0,
                     }
                 },
-                turn: 0,
+                turn: "",
                 trumpcard: "",
                 callpoints: 0,
                 curpoints: 0,
@@ -104,7 +128,12 @@
                 console.log("Room Created");
 
                 room = roomID;
-                playerID = 0;
+                playerID = nameIn.value;
+                players = {
+                    playerID: {
+                        chips: 0,
+                    }
+                }
 
                 document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
                 document.getElementById("start").classList.add("hidden");
@@ -114,32 +143,46 @@
                 var ul = document.getElementById("playerList");
                 var li = document.createElement("li");
                 li.appendChild(document.createTextNode(name.value));
-                li.setAttribute("id", "0");
+                li.setAttribute("id", playerID);
                 ul.appendChild(li);
                 li.classList.add("me");
 
                 var playersRef = ref(db, "rooms/"+roomID+"/players");
 
                 onValue(playersRef, (snapshot) => {
-                    var data = snapshot.val();
+                    players = snapshot.val();
                     var ul = document.getElementById("playerList");
 
                     while(ul.firstChild) {
                         ul.removeChild(ul.firstChild);
                     }
                         
-                    for (var i = 0; i < data.length; i++) {
+                    for (const name in players) {
                         var li = document.createElement("li");
-                        li.appendChild(document.createTextNode(data[i].name));
-                        li.setAttribute("id", `${i}`);
+                        li.appendChild(document.createTextNode(name));
+                        li.setAttribute("id", name);
                         ul.appendChild(li);
 
-                        if (i == playerID) {
+                        if (name == playerID) {
                             li.classList.add("me");
                         }
                     }
                 }, (error) => {
                     console.error("Error listening to changes: ", error);
+                });
+
+                var startedRef = ref(db, "rooms/"+room+"/started");
+
+                onValue(startedRef, (snapshot) => {
+                    started = snapshot.val();
+
+                    if (started == true) {
+                        document.getElementById("lobby").classList.add("hidden");
+                    } else {
+                        document.getElementById("lobby").classList.remove("hidden");
+                    }
+                }, (error) => {
+                    console.error('Error listening to changes:', error);
                 });
             })
             .catch((error)=>{
@@ -155,24 +198,24 @@
                 return;
             }
 
-            get(child(dbref, "rooms/" + code.value))
+            get(child(dbref, "rooms/" + codeIn.value))
             .then((snapshot)=>{
                 if(snapshot.exists()){
                     var data = snapshot.val();
 
-                    for (var i = 0; i < data.players.length; i++) {
-                        if (data.players[i].name == name.value) {
+                    for (const name in data.players) {
+                        if (name == nameIn.value) {
                             alert("Someone in room has the same name");
                             return;
                         }
                     }
 
-                    room = code.value;
-                    playerID = data.players.length;
-                    data.players.push({
-                        name: name.value,
-                    })
-                    console.log(data.players)
+                    room = codeIn.value;
+                    playerID = nameIn.value;
+                    data.players[playerID] = {
+                        chips: 0,
+                    }
+                    players = data.players;
 
                     document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
                     document.getElementById("start").classList.add("hidden");
@@ -180,20 +223,20 @@
                     document.getElementById("lobby").classList.remove("hidden");
 
                     update(ref(db, "rooms/" + room), {
-                        players: data.players
+                        players: players,
                     })
                     .catch((error)=>{
                         alert(error);
                     });
 
                     var ul = document.getElementById("playerList");
-                    for (var i = 0; i < data.players.length; i++) {
+                    for (const name in players) {
                         var li = document.createElement("li");
-                        li.appendChild(document.createTextNode(data.players[i].name));
-                        li.setAttribute("id", `${i}`);
+                        li.appendChild(document.createTextNode(name));
+                        li.setAttribute("id", playerID);
                         ul.appendChild(li);
 
-                        if (i == playerID) {
+                        if (name == playerID) {
                             li.classList.add("me");
                         }
                     }
@@ -201,22 +244,36 @@
                     var playersRef = ref(db, "rooms/"+room+"/players");
 
                     onValue(playersRef, (snapshot) => {
-                        var data = snapshot.val();
+                        players = snapshot.val();
                         var ul = document.getElementById("playerList");
 
                         while(ul.firstChild) {
                             ul.removeChild(ul.firstChild);
                         }
-
-                        for (var i = 0; i < data.length; i++) {
+                        
+                        for (const name in players) {
                             var li = document.createElement("li");
-                            li.appendChild(document.createTextNode(data[i].name));
-                            li.setAttribute("id", `${i}`);
+                            li.appendChild(document.createTextNode(name));
+                            li.setAttribute("id", name);
                             ul.appendChild(li);
 
-                            if (i == playerID) {
+                            if (name == playerID) {
                                 li.classList.add("me");
                             }
+                        }
+                    }, (error) => {
+                        console.error('Error listening to changes:', error);
+                    });
+
+                    var startedRef = ref(db, "rooms/"+room+"/started");
+
+                    onValue(startedRef, (snapshot) => {
+                        started = snapshot.val();
+
+                        if (started == true) {
+                            document.getElementById("lobby").classList.add("hidden");
+                        } else {
+                            document.getElementById("lobby").classList.remove("hidden");
                         }
                     }, (error) => {
                         console.error('Error listening to changes:', error);
@@ -226,11 +283,36 @@
                 }
             })
             .catch((error)=>{
-                alert(error)
+                alert(error);
             })
+        }
+
+        function leaveRoom() {
+            delete players[playerID];
+            update(ref(db, "rooms/" + room), {
+                players: players,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+
+            reset();
+        }
+
+        function startGame() {
+            started = true;
+
+            update(ref(db, "rooms/" + room), {
+                started: true,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
         }
 
         createBtn.addEventListener("click", createRoom);
         joinBtn.addEventListener("click", joinRoom);
+        leaveBtn.addEventListener("click", leaveRoom);
+        startBtn.addEventListener("click", startGame);
     </script>
 </html>
