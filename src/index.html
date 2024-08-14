@@ -23,8 +23,12 @@
             <h1>28</h1>
             <ul id="playerList">
             </ul>
-            <button id="start">Start Game</button>
+            <button id="startGame">Start Game</button>
             <button id="leave">Leave Game</button>
+        </div>
+
+        <div class="hidden card-container" id="playingTable">
+            
         </div>
     </body>
 
@@ -50,7 +54,7 @@
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
 
-        import { getDatabase, set, get, update, remove, ref, child, onValue } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+        import { getDatabase, set, get, update, remove, ref, child, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
         const db = getDatabase();
 
@@ -60,13 +64,14 @@
         var joinBtn = document.querySelector("#join");
         var createBtn = document.querySelector("#create");
         var leaveBtn = document.querySelector("#leave");
-        var startBtn = document.querySelector("#start");
+        var startBtn = document.querySelector("#startGame");
 
         var room;
         var playerID;
         var started = false;
-
+        var listeners = [];
         var players;
+        var hand = ["A spade", "A heart", "J club"]
 
         function reset() {
             room = null;
@@ -84,7 +89,44 @@
                 ul.removeChild(ul.firstChild);
             }
             
-            db.off();
+            for (const ref of listeners) {
+                off(ref);
+            }
+            listeners = [];
+        }
+        
+        function addPlayers(snapshot) {
+            players = snapshot.val();
+            var ul = document.getElementById("playerList");
+
+            while(ul.firstChild) {
+                ul.removeChild(ul.firstChild);
+            }
+                        
+            for (const name in players) {
+                var li = document.createElement("li");
+                li.appendChild(document.createTextNode(name));
+                li.setAttribute("id", name);
+                ul.appendChild(li);
+                
+                if (name == playerID) {
+                    li.classList.add("me");
+                }
+            }
+        }
+
+        function startUpdate(snapshot) {
+            started = snapshot.val();
+
+            if (started == true) {
+                document.getElementById("lobby").classList.add("hidden");
+                document.getElementById("playingTable").classList.remove("hidden");
+
+                drawCards();
+            } else {
+                document.getElementById("lobby").classList.remove("hidden");
+                document.getElementById("playingTable").classList.add("hidden");
+            }
         }
 
         function createRoom() {
@@ -147,43 +189,20 @@
                 ul.appendChild(li);
                 li.classList.add("me");
 
-                var playersRef = ref(db, "rooms/"+roomID+"/players");
+                var playersRef = ref(db, "rooms/"+room+"/players");
 
-                onValue(playersRef, (snapshot) => {
-                    players = snapshot.val();
-                    var ul = document.getElementById("playerList");
-
-                    while(ul.firstChild) {
-                        ul.removeChild(ul.firstChild);
-                    }
-                        
-                    for (const name in players) {
-                        var li = document.createElement("li");
-                        li.appendChild(document.createTextNode(name));
-                        li.setAttribute("id", name);
-                        ul.appendChild(li);
-
-                        if (name == playerID) {
-                            li.classList.add("me");
-                        }
-                    }
-                }, (error) => {
+                onValue(playersRef, (snapshot) => addPlayers(snapshot), (error) => {
                     console.error("Error listening to changes: ", error);
                 });
 
                 var startedRef = ref(db, "rooms/"+room+"/started");
 
-                onValue(startedRef, (snapshot) => {
-                    started = snapshot.val();
-
-                    if (started == true) {
-                        document.getElementById("lobby").classList.add("hidden");
-                    } else {
-                        document.getElementById("lobby").classList.remove("hidden");
-                    }
-                }, (error) => {
+                onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
                     console.error('Error listening to changes:', error);
                 });
+
+                listeners.push(playersRef);
+                listeners.push(startedRef);
             })
             .catch((error)=>{
                 alert(error);
@@ -243,41 +262,18 @@
 
                     var playersRef = ref(db, "rooms/"+room+"/players");
 
-                    onValue(playersRef, (snapshot) => {
-                        players = snapshot.val();
-                        var ul = document.getElementById("playerList");
-
-                        while(ul.firstChild) {
-                            ul.removeChild(ul.firstChild);
-                        }
-                        
-                        for (const name in players) {
-                            var li = document.createElement("li");
-                            li.appendChild(document.createTextNode(name));
-                            li.setAttribute("id", name);
-                            ul.appendChild(li);
-
-                            if (name == playerID) {
-                                li.classList.add("me");
-                            }
-                        }
-                    }, (error) => {
+                    onValue(playersRef, (snapshot) => addPlayers(snapshot), (error) => {
                         console.error('Error listening to changes:', error);
                     });
 
                     var startedRef = ref(db, "rooms/"+room+"/started");
 
-                    onValue(startedRef, (snapshot) => {
-                        started = snapshot.val();
-
-                        if (started == true) {
-                            document.getElementById("lobby").classList.add("hidden");
-                        } else {
-                            document.getElementById("lobby").classList.remove("hidden");
-                        }
-                    }, (error) => {
+                    onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
                         console.error('Error listening to changes:', error);
                     });
+
+                    listeners.push(playersRef);
+                    listeners.push(startedRef);
                 } else {
                     alert("No room with entered code");
                 }
@@ -289,18 +285,27 @@
 
         function leaveRoom() {
             delete players[playerID];
-            update(ref(db, "rooms/" + room), {
-                players: players,
-            })
-            .catch((error)=>{
-                alert(error);
-            });
+
+            if (Object.keys(players).length === 0) {
+                remove(ref(db, "rooms/" + room))
+                .catch((error)=>{
+                    alert(error);
+                });
+            } else {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            }
 
             reset();
         }
 
         function startGame() {
             started = true;
+            console.log(room)
 
             update(ref(db, "rooms/" + room), {
                 started: true,
@@ -310,9 +315,27 @@
             });
         }
 
+        function drawCards() {
+            var playingTable = document.getElementById("playingTable");
+
+            for (const card of hand) {
+                var info = card.split(" ");
+                var cardDiv = document.createElement('div');
+                cardDiv.setAttribute("data-suit", info[1]);
+                cardDiv.setAttribute("data-value", info[0]);
+                cardDiv.classList.add("card")
+
+                playingTable.appendChild(cardDiv);
+            }
+        }
+
         createBtn.addEventListener("click", createRoom);
         joinBtn.addEventListener("click", joinRoom);
         leaveBtn.addEventListener("click", leaveRoom);
         startBtn.addEventListener("click", startGame);
+
+        window.addEventListener('unload', function () {
+            leaveRoom();
+        });
     </script>
 </html>
