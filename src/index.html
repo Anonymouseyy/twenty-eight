@@ -47,7 +47,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
 
-        // Your web app's Firebase configuration
+        // Your web app"s Firebase configuration
         // For Firebase JS SDK v7.20.0 and later, measurementId is optional
         const firebaseConfig = {
             apiKey: "AIzaSyAoUBDg6zn_-nmzB949LfQLE3cBF6U8VTs",
@@ -126,6 +126,20 @@
             }
         }
 
+        function updateGame(snapshot) {
+            var data = snapshot.val();
+
+            if ("curCards" in data) {
+                middleCards = curCards;
+            } else {
+                middleCards = [];
+            }
+
+            players = data.players;
+            hand = data.players[playerID].cards;
+            started = data.started;
+        }
+
         async function startUpdate(snapshot) {
             started = snapshot.val();
 
@@ -159,7 +173,18 @@
                             alert(error);
                         });
 
-                        drawSelfCards();
+                        for (const ref of listeners) {
+                            off(ref);
+                        }
+
+                        var roomRef = ref(db, "rooms/"+room);
+                        listeners = [roomRef];
+
+                        onValue(roomRef, (snapshot) => updateGame(snapshot), (error) => {
+                            console.error("Error listening to changes:", error);
+                        });
+
+                        drawAllCards();
                     } else {
                         alert("Room does not exist");
                         leaveRoom();
@@ -183,8 +208,8 @@
                 roomID += characters.charAt(Math.floor(Math.random() * charactersLength));
             }
 
-            const suits = ['spade', 'heart', 'diamond', 'club'];
-            const ranks = ['A', 'K', 'Q', 'J', '10', '9'];
+            const suits = ["spade", "heart", "diamond", "club"];
+            const ranks = ["A", "K", "Q", "J", "10", "9"];
             const cards = {};
             let index = 0;
 
@@ -209,7 +234,6 @@
                 curPoints: 0,
                 caller: 0,
                 cards: cards,
-                curCards: [],
                 curWinner: "",
                 trumpcardRevealed: false,
                 started: false,
@@ -246,7 +270,7 @@
                 var startedRef = ref(db, "rooms/"+room+"/started");
 
                 onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
-                    console.error('Error listening to changes:', error);
+                    console.error("Error listening to changes:", error);
                 });
 
                 listeners.push(playersRef);
@@ -311,13 +335,13 @@
                     var playersRef = ref(db, "rooms/"+room+"/players");
 
                     onValue(playersRef, (snapshot) => addPlayers(snapshot), (error) => {
-                        console.error('Error listening to changes:', error);
+                        console.error("Error listening to changes:", error);
                     });
 
                     var startedRef = ref(db, "rooms/"+room+"/started");
 
                     onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
-                        console.error('Error listening to changes:', error);
+                        console.error("Error listening to changes:", error);
                     });
 
                     listeners.push(playersRef);
@@ -364,6 +388,7 @@
         }
 
         function drawAllCards() {
+            console.log(players)
             var myCards = document.getElementById("myCards");
             var middleTable = document.getElementById("tableMiddle");
             var oppTable = document.getElementById("oppTable");
@@ -383,7 +408,7 @@
             for (var i = 0; i < hand.length; i++) {
                 var card = hand[i];
                 var [value, suit] = card.split(" ");
-                var cardDiv = document.createElement('div');
+                var cardDiv = document.createElement("div");
 
                 cardDiv.setAttribute("data-suit", suit);
                 cardDiv.setAttribute("data-value", value);
@@ -395,7 +420,7 @@
             for (var i = 0; i < middleCards.length; i++) {
                 var card = middleCards[i];
                 var [value, suit] = card.split(" ");
-                var cardDiv = document.createElement('div');
+                var cardDiv = document.createElement("div");
 
                 cardDiv.setAttribute("data-suit", suit);
                 cardDiv.setAttribute("data-value", value);
@@ -405,12 +430,23 @@
             }
 
             for (const name in players) {
-                var cardsDiv = document.createElement('div');
-                cardsDiv.classList.add("cards-container")
+                if (!("cards" in players[name])) {
+                    continue;
+                }
 
-                for (var i = 0; i < players.name.cards.length; i++) {
-                    var card = players.name.cards[i];
-                    var cardDiv = document.createElement('div');
+                var cardsDiv = document.createElement("div");
+                cardsDiv.classList.add("card-container");
+                cardsDiv.setAttribute("id", name);
+
+                var nameTag = document.createElement("h3");
+                nameTag.classList.add("name-tag");
+                nameTag.innerHTML = name;
+
+                cardsDiv.appendChild(nameTag);
+
+                for (var i = 0; i < players[name].cards.length; i++) {
+                    var card = players[name].cards[i];
+                    var cardDiv = document.createElement("div");
 
                     cardDiv.setAttribute("data-value", "?");
                     cardDiv.classList.add("card")
@@ -427,7 +463,7 @@
         leaveBtn.addEventListener("click", leaveRoom);
         startBtn.addEventListener("click", startGame);
 
-        window.addEventListener('unload', function () {
+        window.addEventListener("unload", function () {
             leaveRoom();
         });
     </script>

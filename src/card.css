@@ -2,13 +2,6 @@
     box-sizing: border-box;
   }
   
-  body {
-    background-color: #DDD;
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5em;
-  }
-  
   .card {
     --width: 5em;
     --height: calc(var(--width) * 1.4);
