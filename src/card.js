@@ -2,6 +2,16 @@ function addCardElements(card) {
   const value = card.dataset.value
   // const suit = card.dataset.suit
 
+  if (value == "back") {
+    card.classList.remove("card")
+    card.classList.add("card-complete")
+
+    card.append(createCornerNumber("top", "?"))
+    card.append(createCornerNumber("bottom", "?"))
+
+    return;
+  }
+
   const valueAsNumber = parseInt(value)
   if (isNaN(valueAsNumber)) {
     card.append(createPip())
@@ -13,6 +23,9 @@ function addCardElements(card) {
 
   card.append(createCornerNumber("top", value))
   card.append(createCornerNumber("bottom", value))
+
+  card.classList.remove("card")
+  card.classList.add("card-complete")
 }
 
 function createCornerNumber(position, value) {

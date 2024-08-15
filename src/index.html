@@ -27,8 +27,18 @@
             <button id="leave">Leave Game</button>
         </div>
 
-        <div class="hidden card-container" id="playingTable">
-            
+        <div class="hidden table" id="playingTable">
+            <div class="opponent-table" id="oppTable">
+
+            </div>
+
+            <div class="table-middle card-container" id="tableMiddle">
+
+            </div>
+
+            <div class="my-cards card-container" id="myCards">
+
+            </div>
         </div>
     </body>
 
@@ -72,6 +82,7 @@
         var listeners = [];
         var players;
         var hand = [];
+        var middleCards = [];
 
         function reset() {
             room = null;
@@ -148,7 +159,7 @@
                             alert(error);
                         });
 
-                        drawCards();
+                        drawSelfCards();
                     } else {
                         alert("Room does not exist");
                         leaveRoom();
@@ -194,10 +205,13 @@
                 },
                 turn: "",
                 trumpcard: "",
-                callpoints: 0,
-                curpoints: 0,
+                callPoints: 0,
+                curPoints: 0,
                 caller: 0,
                 cards: cards,
+                curCards: [],
+                curWinner: "",
+                trumpcardRevealed: false,
                 started: false,
             })
             .then(()=>{
@@ -349,8 +363,22 @@
             });
         }
 
-        function drawCards() {
-            var playingTable = document.getElementById("playingTable");
+        function drawAllCards() {
+            var myCards = document.getElementById("myCards");
+            var middleTable = document.getElementById("tableMiddle");
+            var oppTable = document.getElementById("oppTable");
+
+            while(myCards.firstChild) {
+                myCards.removeChild(myCards.firstChild);
+            }
+
+            while(middleTable.firstChild) {
+                middleTable.removeChild(middleTable.firstChild);
+            }
+
+            while(oppTable.firstChild) {
+                oppTable.removeChild(oppTable.firstChild);
+            }
 
             for (var i = 0; i < hand.length; i++) {
                 var card = hand[i];
@@ -361,7 +389,36 @@
                 cardDiv.setAttribute("data-value", value);
                 cardDiv.classList.add("card")
 
-                playingTable.appendChild(cardDiv);
+                myCards.appendChild(cardDiv);
+            }
+
+            for (var i = 0; i < middleCards.length; i++) {
+                var card = middleCards[i];
+                var [value, suit] = card.split(" ");
+                var cardDiv = document.createElement('div');
+
+                cardDiv.setAttribute("data-suit", suit);
+                cardDiv.setAttribute("data-value", value);
+                cardDiv.classList.add("card")
+
+                middleCards.appendChild(cardDiv);
+            }
+
+            for (const name in players) {
+                var cardsDiv = document.createElement('div');
+                cardsDiv.classList.add("cards-container")
+
+                for (var i = 0; i < players.name.cards.length; i++) {
+                    var card = players.name.cards[i];
+                    var cardDiv = document.createElement('div');
+
+                    cardDiv.setAttribute("data-value", "?");
+                    cardDiv.classList.add("card")
+
+                    cardsDiv.appendChild(cardDiv);
+                }
+
+                oppTable.appendChild(cardsDiv);
             }
         }
 

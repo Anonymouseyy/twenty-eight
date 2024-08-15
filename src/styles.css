@@ -75,3 +75,21 @@ h2 {
     display: flex;
     flex-direction: row;
 }
+
+.my-cards {
+    position: absolute;
+    bottom: 20%;
+    left: 50%;
+}
+
+.opponent-table {
+    display: flex;
+    flex-direction: row;
+    gap: 5%;
+    align-items: center;
+}
+
+.table {
+    height: 100%;
+    width: 100%;
+}
