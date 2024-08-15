@@ -37,7 +37,7 @@
             </div>
 
             <div class="my-cards card-container" id="myCards">
-
+                
             </div>
         </div>
     </body>
@@ -83,6 +83,7 @@
         var players;
         var hand = [];
         var middleCards = [];
+        var turn;
 
         function reset() {
             room = null;
@@ -138,9 +139,11 @@
             players = data.players;
             hand = data.players[playerID].cards;
             started = data.started;
+
+            drawAllCards();
         }
 
-        async function startUpdate(snapshot) {
+        function startUpdate(snapshot) {
             started = snapshot.val();
 
             if (started == true) {
@@ -149,10 +152,15 @@
                 const dbref = ref(db);
                 var newHand = [];
 
-                await get(child(dbref, "rooms/" + room))
+                get(child(dbref, "rooms/" + room))
                 .then((snapshot) => {
                     if(snapshot.exists()){
                         var data = snapshot.val();
+
+                        if (!(data.turn == playerID)) {
+                            startUpdate(snapshot);
+                            return;
+                        }
 
                         for (let i = 0; i < 4; i++) {
                             const idx = Math.floor(Math.random() * data.cards.length);
@@ -228,7 +236,7 @@
                         chips: 0,
                     }
                 },
-                turn: "",
+                turn: playerID,
                 trumpcard: "",
                 callPoints: 0,
                 curPoints: 0,
@@ -404,6 +412,10 @@
             while(oppTable.firstChild) {
                 oppTable.removeChild(oppTable.firstChild);
             }
+
+            var selfNameTag = document.createElement("h3");
+            selfNameTag.innerHTML = "Me";
+            myCards.appendChild(selfNameTag);
 
             for (var i = 0; i < hand.length; i++) {
                 var card = hand[i];

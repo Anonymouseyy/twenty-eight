@@ -18,6 +18,11 @@
     position: relative;
   }
 
+  .card-complete:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+
   .card-complete {
     --width: 5em;
     --height: calc(var(--width) * 1.4);
@@ -32,6 +37,7 @@
     grid-template-rows: repeat(8, 1fr);
     align-items: center;
     position: relative;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
   }
   
   [data-suit="heart"].card,
