@@ -105,6 +105,22 @@
                 off(ref);
             }
             listeners = [];
+
+            var myCards = document.getElementById("myCards");
+            var middleTable = document.getElementById("tableMiddle");
+            var oppTable = document.getElementById("oppTable");
+
+            while(myCards.firstChild) {
+                myCards.removeChild(myCards.firstChild);
+            }
+
+            while(middleTable.firstChild) {
+                middleTable.removeChild(middleTable.firstChild);
+            }
+
+            while(oppTable.firstChild) {
+                oppTable.removeChild(oppTable.firstChild);
+            }
         }
         
         function addPlayers(snapshot) {
@@ -143,8 +159,8 @@
             drawAllCards();
         }
 
-        function startUpdate(snapshot) {
-            started = snapshot.val();
+        function startUpdate(s) {
+            started = s.val();
 
             if (started == true) {
                 document.getElementById("lobby").classList.add("hidden");
@@ -158,7 +174,7 @@
                         var data = snapshot.val();
 
                         if (!(data.turn == playerID)) {
-                            startUpdate(snapshot);
+                            startUpdate(s);
                             return;
                         }
 
@@ -173,9 +189,19 @@
                         hand = [...newHand];
                         data.players[playerID].cards = hand;
 
+                        var newTurn;
+                        var playerList = Object.keys(data.players);
+
+                        if (playerList.indexOf(data.turn) < playerList.length-1) {
+                            newTurn = playerList[playerList.indexOf(data.turn) + 1];
+                        } else {
+                            newTurn = playerList[0];
+                        }
+
                         update(ref(db, "rooms/" + room), {
                             cards: data.cards,
                             players: data.players,
+                            turn: newTurn,
                         })
                         .catch((error)=>{
                             alert(error);
@@ -415,6 +441,7 @@
 
             var selfNameTag = document.createElement("h3");
             selfNameTag.innerHTML = "Me";
+            selfNameTag.classList.add("name-tag");
             myCards.appendChild(selfNameTag);
 
             for (var i = 0; i < hand.length; i++) {
@@ -442,7 +469,7 @@
             }
 
             for (const name in players) {
-                if (!("cards" in players[name])) {
+                if (!("cards" in players[name]) || name == playerID) {
                     continue;
                 }
 
