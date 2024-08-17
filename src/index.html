@@ -88,6 +88,7 @@
         var hand = [];
         var middleCards = [];
         var turn;
+        var callPoints;
 
         function reset() {
             room = null;
@@ -159,10 +160,21 @@
             players = data.players;
             hand = data.players[playerID].cards;
             started = data.started;
+            callPoints = data.callPoints;
 
             drawAllCards();
 
             if (!data.callingOver) {
+                if (document.getElementById("bidInfo")) {
+                    document.getElementById("bidInfo").remove();
+                }
+                    
+                const alerts = document.querySelector("#alerts");
+                const cont = document.createElement("div");
+                cont.id = "bidInfo";
+                cont.innerText = `Caller: ${data.caller} Bid: ${data.callPoints}`;
+                alerts.appendChild(cont);
+
                 if (data.turn == data.caller && data.turn == playerID) {
                     update(ref(db, "rooms/" + room), {
                         callingOver: true,
@@ -200,21 +212,9 @@
                     const skipBtn = document.createElement("button");
                     skipBtn.id = "skipBid";
                     skipBtn.textContent = "Skip";
-                    enterBtn.addEventListener("click", skipBid);
+                    skipBtn.addEventListener("click", skipBid);
                     cont.appendChild(skipBtn);
 
-                    alerts.appendChild(cont);
-                }
-
-                else {
-                    if (document.getElementById("bidInfo")) {
-                        document.getElementById("bidInfo").remove();
-                    }
-                    
-                    const alerts = document.querySelector("#alerts");
-                    const cont = document.createElement("div");
-                    cont.id = "bidInfo";
-                    cont.innerText = `Caller: ${data.caller} Bid: ${data.callPoints}`;
                     alerts.appendChild(cont);
                 }
             }
@@ -560,12 +560,16 @@
         }
 
         function enterBid() {
-            var value = parseInt(document.getElementById("bid"));
+            var value = parseInt(document.getElementById("bid").value);
 
             if (value < 14) {
                 value = 14;
             } else if (value > 28) {
                 value = 28;
+            }
+
+            if (value <= callPoints) {
+                return;
             }
 
             var newTurn;
@@ -590,6 +594,7 @@
         }
 
         function skipBid() {
+            console.log("skip");
             var newTurn;
             var playerList = Object.keys(players);
 
