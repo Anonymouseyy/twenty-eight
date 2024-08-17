@@ -39,6 +39,10 @@
             <div class="my-cards card-container" id="myCards">
                 
             </div>
+
+            <div class="alert" id="alerts">
+
+            </div>
         </div>
     </body>
 
@@ -157,6 +161,63 @@
             started = data.started;
 
             drawAllCards();
+
+            if (!data.callingOver) {
+                if (data.turn == data.caller && data.turn == playerID) {
+                    update(ref(db, "rooms/" + room), {
+                        callingOver: true,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+
+                    // Get trump card
+                }
+
+                else if (data.turn == playerID) {
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+                    cont.id = "bidContainer";
+
+                    const label = document.createElement("div");
+                    label.innerHTML = "Bid: ";
+                    cont.appendChild(label);
+
+                    const numberInput = document.createElement("input");
+                    numberInput.type = "number";
+                    numberInput.min = "14";
+                    numberInput.max = "28";
+                    numberInput.id = "bid";
+                    numberInput.placeholder = "Bid";
+                    cont.appendChild(numberInput);
+
+                    const enterBtn = document.createElement("button");
+                    enterBtn.id = "enterBid";
+                    enterBtn.textContent = "Submit Bid";
+                    enterBtn.addEventListener("click", enterBid);
+                    cont.appendChild(enterBtn);
+
+                    const skipBtn = document.createElement("button");
+                    skipBtn.id = "skipBid";
+                    skipBtn.textContent = "Skip";
+                    enterBtn.addEventListener("click", skipBid);
+                    cont.appendChild(skipBtn);
+
+                    alerts.appendChild(cont);
+                }
+
+                else {
+                    if (document.getElementById("bidInfo")) {
+                        document.getElementById("bidInfo").remove();
+                    }
+                    
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+                    cont.id = "bidInfo";
+                    cont.innerText = `Caller: ${data.caller} Bid: ${data.callPoints}`;
+                    alerts.appendChild(cont);
+                }
+            }
         }
 
         function startUpdate(s) {
@@ -266,11 +327,12 @@
                 trumpcard: "",
                 callPoints: 0,
                 curPoints: 0,
-                caller: 0,
+                caller: "",
                 cards: cards,
                 curWinner: "",
                 trumpcardRevealed: false,
                 started: false,
+                callingOver: false,
             })
             .then(()=>{
                 console.log("Room Created");
@@ -495,6 +557,56 @@
 
                 oppTable.appendChild(cardsDiv);
             }
+        }
+
+        function enterBid() {
+            var value = parseInt(document.getElementById("bid"));
+
+            if (value < 14) {
+                value = 14;
+            } else if (value > 28) {
+                value = 28;
+            }
+
+            var newTurn;
+            var playerList = Object.keys(players);
+
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
+            update(ref(db, "rooms/" + room), {
+                callPoints: value,
+                caller: playerID,
+                turn: newTurn,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+
+            document.getElementById("bidContainer").remove();
+        }
+
+        function skipBid() {
+            var newTurn;
+            var playerList = Object.keys(players);
+
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
+            update(ref(db, "rooms/" + room), {
+                turn: newTurn,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+
+            document.getElementById("bidContainer").remove();
         }
 
         createBtn.addEventListener("click", createRoom);
