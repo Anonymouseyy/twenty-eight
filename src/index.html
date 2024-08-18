@@ -89,6 +89,7 @@
         var middleCards = [];
         var turn;
         var callPoints;
+        var trumpcardRevealed;
 
         function reset() {
             room = null;
@@ -161,6 +162,7 @@
             hand = data.players[playerID].cards;
             started = data.started;
             callPoints = data.callPoints;
+            trumpcardRevealed = data.trumpcardRevealed;
 
             drawAllCards();
 
@@ -183,7 +185,12 @@
                         alert(error);
                     });
 
-                    // Get trump card
+                    drawAllCards(submitTrumpCard);
+                    
+                    const trumpCont = document.createElement("div");
+                    trumpCont.id = "selectTrump";
+                    trumpCont.innerText = "Select a Trump Card";
+                    alerts.appendChild(trumpCont);
                 }
 
                 else if (data.turn == playerID) {
@@ -483,8 +490,7 @@
             });
         }
 
-        function drawAllCards() {
-            console.log(players)
+        function drawAllCards(onMove=null) {
             var myCards = document.getElementById("myCards");
             var middleTable = document.getElementById("tableMiddle");
             var oppTable = document.getElementById("oppTable");
@@ -513,7 +519,14 @@
 
                 cardDiv.setAttribute("data-suit", suit);
                 cardDiv.setAttribute("data-value", value);
+                cardDiv.id = card;
                 cardDiv.classList.add("card")
+
+                if (onMove != null) {
+                    cardDiv.addEventListener("click", function() {
+                        onMove(card);
+                    })
+                }
 
                 myCards.appendChild(cardDiv);
             }
@@ -612,6 +625,20 @@
             });
 
             document.getElementById("bidContainer").remove();
+        }
+
+        function submitTrumpCard(c) {
+            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+            document.getElementById("selectTrump").remove();
+
+            update(ref(db, "rooms/" + room), {
+                callingOver: true,
+                players: players,
+                trumpcard: c,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
         }
 
         createBtn.addEventListener("click", createRoom);
