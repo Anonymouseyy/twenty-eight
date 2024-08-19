@@ -513,19 +513,19 @@
             myCards.appendChild(selfNameTag);
 
             for (var i = 0; i < hand.length; i++) {
-                var card = hand[i];
-                var [value, suit] = card.split(" ");
-                var cardDiv = document.createElement("div");
+                let card = hand[i];
+                let [value, suit] = card.split(" ");
+                let cardDiv = document.createElement("div");
+                console.log(card);
 
                 cardDiv.setAttribute("data-suit", suit);
                 cardDiv.setAttribute("data-value", value);
                 cardDiv.id = card;
-                cardDiv.classList.add("card")
-
+                cardDiv.classList.add("card");
+                console.log(card);
                 if (onMove != null) {
-                    cardDiv.addEventListener("click", function() {
-                        onMove(card);
-                    })
+                    console.log(card);
+                    cardDiv.onclick = () => submitTrumpCard(card);
                 }
 
                 myCards.appendChild(cardDiv);
