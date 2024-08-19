@@ -225,6 +225,44 @@
                     alerts.appendChild(cont);
                 }
             }
+            
+            if (data.callingOver && data.secondDeal && data.turn == playerID) {
+                if (players[playerID].cards.length == 7 || players[playerID].cards.length == 8) {
+                    update(ref(db, "rooms/" + room), {
+                        secondDeal: false,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+                } else {
+                    for (let i = 0; i < 4; i++) {
+                        const idx = Math.floor(Math.random() * data.cards.length);
+                        const card = data.cards[idx];
+
+                        data.cards.splice(idx, 1);
+                        hand.push(card);
+                    }
+
+                    data.players[playerID].cards = hand;
+                    var newTurn;
+                    var playerList = Object.keys(data.players);
+
+                    if (playerList.indexOf(data.turn) < playerList.length-1) {
+                        newTurn = playerList[playerList.indexOf(data.turn) + 1];
+                    } else {
+                        newTurn = playerList[0];
+                    }
+
+                    update(ref(db, "rooms/" + room), {
+                        cards: data.cards,
+                        players: data.players,
+                        turn: newTurn,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+                }
+            }
         }
 
         function startUpdate(s) {
@@ -632,13 +670,17 @@
             document.getElementById("selectTrump").remove();
 
             update(ref(db, "rooms/" + room), {
-                callingOver: true,
                 players: players,
                 trumpcard: c,
+                secondDeal: true,
             })
             .catch((error)=>{
                 alert(error);
             });
+        }
+
+        function playCard(c) {
+
         }
 
         createBtn.addEventListener("click", createRoom);
