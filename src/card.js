@@ -5,6 +5,7 @@ function addCardElements(card) {
   if (value == "back") {
     card.classList.remove("card")
     card.classList.add("card-complete")
+    card.classList.add("oppsCard")
 
     card.append(createCornerNumber("top", "?"))
     card.append(createCornerNumber("bottom", "?"))
