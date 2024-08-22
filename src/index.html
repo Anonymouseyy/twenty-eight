@@ -43,6 +43,10 @@
             <div class="alert" id="alerts">
 
             </div>
+
+            <div class="trumpcard" id="trumpcard">
+
+            </div>
         </div>
     </body>
 
@@ -92,6 +96,7 @@
         var trumpcardRevealed;
         var curPoints;
         var curSuit;
+        var trumpcard = "";
 
         const cardOrder = ["7", "8", "Q", "K", "10", "A", "9", "J"];
 
@@ -169,6 +174,10 @@
             trumpcardRevealed = data.trumpcardRevealed;
             curPoints = data.curPoints;
             curSuit = data.curSuit;
+            
+            if (trumpcardRevealed) {
+                trumpcard = data.trumpcard;
+            }
 
             drawAllCards();
 
@@ -275,8 +284,21 @@
                     // Figure out winner, add points, transition turn, alert players
                 }
 
-                else if (!hand.some(str => str.includes(curSuit))) {
-                    // Option to reveal trump card
+                else if (curSuit && !trumpcardRevealed && !hand.some(str => str.includes(curSuit))) {
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+
+                    const revealBtn = document.createElement("button");
+                    revealBtn.id = "reveal";
+                    revealBtn.textContent = "Reveal Trump Card";
+                    revealBtn.addEventListener("click", showTrumpCard);
+
+                    cont.appendChild(revealBtn);
+                    alerts.appendChild(cont);
+                }
+
+                else if (trumpcardRevealed) {
+                    // Play like trump card revealed
                 }
 
                 else {
@@ -286,7 +308,7 @@
                     cont.innerText = "YOUR TURN";
                     alerts.appendChild(cont);
 
-                    drawAllCards(playCard);
+                    drawAllCards(playCardNoTrump);
                 }
             }
         }
@@ -582,15 +604,12 @@
                 let card = hand[i];
                 let [value, suit] = card.split(" ");
                 let cardDiv = document.createElement("div");
-                console.log(card);
 
                 cardDiv.setAttribute("data-suit", suit);
                 cardDiv.setAttribute("data-value", value);
                 cardDiv.id = card;
                 cardDiv.classList.add("card");
-                console.log(card);
                 if (onMove != null) {
-                    console.log(card);
                     cardDiv.onclick = () => submitTrumpCard(card);
                 }
 
@@ -635,6 +654,24 @@
                 }
 
                 oppTable.appendChild(cardsDiv);
+            }
+
+            if (trumpcardRevealed) {
+                const trumpDiv = document.getElementById("trumpcard");
+                let [value, suit] = trumpcard.split(" ");
+                let cardDiv = document.createElement("div");
+
+                const label = document.createElement("h3");
+                label.textContent = "Trump Card";
+                label.id = "trumpLabel";
+
+                cardDiv.setAttribute("data-suit", suit);
+                cardDiv.setAttribute("data-value", value);
+                cardDiv.id = trumpcard;
+                cardDiv.classList.add("card");
+
+                trumpDiv.append(label);
+                trumpDiv.append(cardDiv);
             }
         }
 
@@ -707,21 +744,21 @@
             });
         }
 
-        function playCard(c) {
+        function playCardNoTrump(c) {
             players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
             document.getElementById("turnInfo").remove();
             
             var [value, suit] = card.split(" ");
 
-            if (value == "A" || value == "10") {
-                curPoints++;
-            } else if (value == "9") {
-                curPoints += 2;
-            } else if (value == "J") {
-                curPoints += 3;
-            }
-
             if (middleCards.length == 0) {
+                if (value == "A" || value == "10") {
+                    curPoints++;
+                } else if (value == "9") {
+                    curPoints += 2;
+                } else if (value == "J") {
+                    curPoints += 3;
+                }
+
                 middleCards.append(c);
                 
                 update(ref(db, "rooms/" + room), {
@@ -736,6 +773,18 @@
                 });
 
                 return;
+            }
+
+            if (curSuit != suit) {
+                return;
+            }
+
+            if (value == "A" || value == "10") {
+                curPoints++;
+            } else if (value == "9") {
+                curPoints += 2;
+            } else if (value == "J") {
+                curPoints += 3;
             }
 
             var newCurWinner = true;
@@ -773,6 +822,17 @@
                 });
             }
             
+        }
+
+        function showTrumpCard() {
+            update(ref(db, "rooms/" + room), {
+                trumpcardRevealed: true,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+
+            document.getElementById("reveal").remove();
         }
 
         createBtn.addEventListener("click", createRoom);
