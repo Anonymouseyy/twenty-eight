@@ -97,6 +97,7 @@
         var curPoints;
         var curSuit;
         var trumpcard = "";
+        var caller;
 
         const cardOrder = ["7", "8", "Q", "K", "10", "A", "9", "J"];
 
@@ -158,7 +159,7 @@
             }
         }
 
-        function updateGame(snapshot) {
+        async function updateGame(snapshot) {
             var data = snapshot.val();
 
             if ("curCards" in data) {
@@ -174,10 +175,8 @@
             trumpcardRevealed = data.trumpcardRevealed;
             curPoints = data.curPoints;
             curSuit = data.curSuit;
-            
-            if (trumpcardRevealed) {
-                trumpcard = data.trumpcard;
-            }
+            caller = data.caller;
+            trumpcard = data.trumpcard;
 
             drawAllCards();
 
@@ -241,7 +240,11 @@
                 }
             }
             
-            if (data.callingOver && data.secondDeal && data.turn == playerID) {
+            else if (data.callingOver && data.turn == playerID && Object.values(players).every(player => Array.isArray(player.cards) && player.cards.length === 0)) {
+                // Game over, did caller win, distribute winnings, reset game for another one
+            }
+
+            else if (data.callingOver && data.secondDeal && data.turn == playerID) {
                 if (players[playerID].cards.length == 7 || players[playerID].cards.length == 8) {
                     update(ref(db, "rooms/" + room), {
                         secondDeal: false,
@@ -279,9 +282,36 @@
                 }
             }
         
-            if (data.callingOver && !data.secondDeal && data.turn == playerID) {
+            else if (data.callingOver && !data.secondDeal && data.turn == playerID) {
+                if (data.lastWinner) {
+                    document.getElementById("lastWinner").remove();
+
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+                    cont.id = "lastWinner";
+                    cont.innerText = `${data.lastWinner} won last btw`;
+                    alerts.appendChild(cont);
+                }
+
                 if (Object.keys(players).length == middleCards.length) {
                     // Figure out winner, add points, transition turn, alert players
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+
+                    if (data.curWinner == data.caller) {
+                        data.callerPoints += data.curPoints;
+                    }
+
+                    update(ref(db, "rooms/" + room), {
+                        turn: data.curWinner,
+                        callerPoints: data.callerPoints,
+                        curPoints: 0,
+                        curCards: 0,
+                        curWinner: "",
+                        lastWinner: data.curWinner,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
                 }
 
                 else if (curSuit && !trumpcardRevealed && !hand.some(str => str.includes(curSuit))) {
@@ -298,7 +328,13 @@
                 }
 
                 else if (trumpcardRevealed) {
-                    // Play like trump card revealed
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+                    cont.id = "turnInfo";
+                    cont.innerText = "YOUR TURN";
+                    alerts.appendChild(cont);
+
+                    drawAllCards(playCardTrump);
                 }
 
                 else {
@@ -428,6 +464,7 @@
                 trumpcardRevealed: false,
                 started: false,
                 callingOver: false,
+                lastWinner: "",
             })
             .then(()=>{
                 console.log("Room Created");
@@ -745,12 +782,12 @@
         }
 
         function playCardNoTrump(c) {
-            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
-            document.getElementById("turnInfo").remove();
-            
-            var [value, suit] = card.split(" ");
-
             if (middleCards.length == 0) {
+                players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+                document.getElementById("turnInfo").remove();
+            
+                var [value, suit] = card.split(" ");
+
                 if (value == "A" || value == "10") {
                     curPoints++;
                 } else if (value == "9") {
@@ -778,6 +815,11 @@
             if (curSuit != suit) {
                 return;
             }
+
+            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+            document.getElementById("turnInfo").remove();
+            
+            var [value, suit] = card.split(" ");
 
             if (value == "A" || value == "10") {
                 curPoints++;
@@ -821,12 +863,111 @@
                     alert(error);
                 });
             }
+        }
+
+        function playCardTrump(c) {
+            if (middleCards.length == 0) {
+                players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+                document.getElementById("turnInfo").remove();
             
+                var [value, suit] = card.split(" ");
+
+                if (value == "A" || value == "10") {
+                    curPoints++;
+                } else if (value == "9") {
+                    curPoints += 2;
+                } else if (value == "J") {
+                    curPoints += 3;
+                }
+
+                middleCards.append(c);
+                
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    curWinner: playerID,
+                    curSuit: suit,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+
+                return;
+            }
+
+            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+            document.getElementById("turnInfo").remove();
+            
+            var [value, suit] = card.split(" ");
+
+            if (hand.some(str => str.includes(curSuit)) && suit != curSuit) {
+                return;
+            }
+
+            var [tvalue, tsuit] = trumpcard.split(" ");
+
+            if (value == "A" || value == "10") {
+                curPoints++;
+            } else if (value == "9") {
+                curPoints += 2;
+            } else if (value == "J") {
+                curPoints += 3;
+            }
+
+            var newCurWinner = true;
+            var trumpSuit = (suit == tsuit);
+
+            for (var i = 0; i < middleCards.length; i++) {
+                let card = hand[i];
+                let [cvalue, csuit] = card.split(" ");
+
+                if (trumpSuit && csuit == tsuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
+                    newCurWinner = false;
+                    break;
+                }
+                
+                else if (!trumpSuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
+                    newCurWinner = false;
+                    break;
+                }
+                 
+                else if (!trumpSuit && csuit == tsuit) {
+                    newCurWinner = false;
+                    break;
+                }
+            }
+
+            middleCards.append(c);
+
+            if (!newCurWinner) {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            } else {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    curWinner: playerID,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            }
         }
 
         function showTrumpCard() {
+            players[caller].cards.push(trumpcard);
+
             update(ref(db, "rooms/" + room), {
                 trumpcardRevealed: true,
+                players: players,
             })
             .catch((error)=>{
                 alert(error);
