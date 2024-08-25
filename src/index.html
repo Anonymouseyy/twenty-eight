@@ -783,6 +783,10 @@
             }
 
             if (trumpcardRevealed) {
+                if (document.getElementById("trumpcard")) {
+                    document.getElementById("trumpcard").remove();
+                }
+
                 const trumpDiv = document.getElementById("trumpcard");
                 let [value, suit] = trumpcard.split(" ");
                 let cardDiv = document.createElement("div");
@@ -872,11 +876,13 @@
         }
 
         function playCardNoTrump(c) {
+            console.log(c);
+            console.log(curSuit);
             var newTurn;
-            var playerList = Object.keys(data.players);
+            var playerList = Object.keys(players);
 
-            if (playerList.indexOf(data.turn) < playerList.length-1) {
-                newTurn = playerList[playerList.indexOf(data.turn) + 1];
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
             } else {
                 newTurn = playerList[0];
             }
@@ -912,14 +918,15 @@
                 return;
             }
 
+            var [value, suit] = c.split(" ");
+
             if (curSuit != suit) {
+                console.log(suit);
                 return;
             }
 
             players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
             document.getElementById("turnInfo").remove();
-            
-            var [value, suit] = c.split(" ");
 
             if (value == "A" || value == "10") {
                 curPoints++;
@@ -932,8 +939,10 @@
             var newCurWinner = true;
 
             for (var i = 0; i < middleCards.length; i++) {
-                let card = hand[i];
-                let [cvalue, csuit] = card.split(" ");
+                var card = hand[i];
+                var [cvalue, csuit] = card.split(" ");
+                console.log(cardOrder.indexOf(cvalue));
+                console.log(cardOrder.indexOf(value));
                 
                 if (cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
                     newCurWinner = false;
@@ -959,7 +968,7 @@
                     curCards: middleCards,
                     curPoints: curPoints,
                     curWinner: playerID,
-                    turn, newTurn,
+                    turn: newTurn,
                 })
                 .catch((error)=>{
                     alert(error);
@@ -969,10 +978,10 @@
 
         function playCardTrump(c) {
             var newTurn;
-            var playerList = Object.keys(data.players);
+            var playerList = Object.keys(players);
 
-            if (playerList.indexOf(data.turn) < playerList.length-1) {
-                newTurn = playerList[playerList.indexOf(data.turn) + 1];
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
             } else {
                 newTurn = playerList[0];
             }
@@ -1008,14 +1017,14 @@
                 return;
             }
 
-            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
-            document.getElementById("turnInfo").remove();
-            
             var [value, suit] = c.split(" ");
 
             if (hand.some(str => str.includes(curSuit)) && suit != curSuit) {
                 return;
             }
+
+            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+            document.getElementById("turnInfo").remove();
 
             var [tvalue, tsuit] = trumpcard.split(" ");
 
@@ -1031,8 +1040,8 @@
             var trumpSuit = (suit == tsuit);
 
             for (var i = 0; i < middleCards.length; i++) {
-                let card = hand[i];
-                let [cvalue, csuit] = card.split(" ");
+                var card = hand[i];
+                var [cvalue, csuit] = card.split(" ");
 
                 if (trumpSuit && csuit == tsuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
                     newCurWinner = false;
