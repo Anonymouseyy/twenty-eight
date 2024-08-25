@@ -180,7 +180,44 @@
 
             drawAllCards();
 
-            if (!data.callingOver) {
+            if (!data.started) {
+                if (!(data.turn == playerID)) {
+                    return;
+                }
+
+                for (let i = 0; i < 4; i++) {
+                    const idx = Math.floor(Math.random() * data.cards.length);
+                    const card = data.cards[idx];
+
+                    data.cards.splice(idx, 1);
+                    newHand.push(card);
+                }
+
+                hand = [...newHand];
+                data.players[playerID].cards = hand;
+
+                var newTurn;
+                var playerList = Object.keys(data.players);
+
+                if (playerList.indexOf(data.turn) < playerList.length-1) {
+                    newTurn = playerList[playerList.indexOf(data.turn) + 1];
+                } else {
+                    newTurn = playerList[0];
+                }
+
+                update(ref(db, "rooms/" + room), {
+                    cards: data.cards,
+                    players: data.players,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+
+                drawAllCards();
+            }
+
+            else if (!data.callingOver) {
                 if (document.getElementById("bidInfo")) {
                     document.getElementById("bidInfo").remove();
                 }
@@ -242,6 +279,62 @@
             
             else if (data.callingOver && data.turn == playerID && Object.values(players).every(player => Array.isArray(player.cards) && player.cards.length === 0)) {
                 // Game over, did caller win, distribute winnings, reset game for another one
+                var callerWin = (data.curPoints >= data.callPoints);
+
+                if (callerWin) {
+                    players[data.caller].chips + Object.keys(obj).length-1;
+                    
+                    for (let player in players) {
+                        if (player == data.caller) { continue; }
+
+                        players[player].chips--;
+                    }
+                } else {
+                    players[data.caller].chips - Object.keys(obj).length-1;
+                    
+                    for (let player in players) {
+                        if (player == data.caller) { continue; }
+
+                        players[player].chips++;
+                    }
+                }
+
+
+                for (let i = 0; i < 5; i++) {
+                    roomID += characters.charAt(Math.floor(Math.random() * charactersLength));
+                }
+
+                const suits = ["spade", "heart", "diamond", "club"];
+                const ranks = ["A", "K", "Q", "J", "10", "9"];
+                const cards = {};
+                let index = 0;
+
+                for (const suit of suits) {
+                    for (const rank of ranks) {
+                        cards[index] = `${rank} ${suit}`;
+                        index++;
+                    }
+                }
+
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    turn: playerID,
+                    trumpcard: "",
+                    callPoints: 0,
+                    curPoints: 0,
+                    callerPoints: 0,
+                    curSuit: "",
+                    caller: "",
+                    cards: cards,
+                    curWinner: "",
+                    trumpcardRevealed: false,
+                    started: false,
+                    callingOver: false,
+                    lastWinner: "",
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
             }
 
             else if (data.callingOver && data.secondDeal && data.turn == playerID) {
@@ -305,7 +398,7 @@
                         turn: data.curWinner,
                         callerPoints: data.callerPoints,
                         curPoints: 0,
-                        curCards: 0,
+                        curCards: [],
                         curWinner: "",
                         lastWinner: data.curWinner,
                     })
