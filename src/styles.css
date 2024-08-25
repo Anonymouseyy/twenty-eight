@@ -92,7 +92,7 @@ h2 {
     flex-direction: row;
     gap: 5%;
     width: 100%;
-    justify-content: center;
+    justify-content: space-evenly;
 }
 
 .table {
@@ -122,4 +122,10 @@ h2 {
     right: 1%;
     bottom: 1%;
     font-size: 1rem;
+}
+
+.table-middle {
+    position: absolute;
+    top: 50%;
+    width: 100%;
 }

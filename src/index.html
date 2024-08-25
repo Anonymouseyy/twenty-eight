@@ -160,7 +160,7 @@
         }
 
         async function updateGame(snapshot) {
-            var data = snapshot.val();
+            const data = snapshot.val();
 
             if ("curCards" in data) {
                 middleCards = data.curCards;
@@ -217,7 +217,7 @@
                 drawAllCards();
             }
 
-            else if (!data.callingOver) {
+            else if (!data.callingOver && !data.secondDeal) {
                 if (document.getElementById("bidInfo")) {
                     document.getElementById("bidInfo").remove();
                 }
@@ -229,14 +229,8 @@
                 alerts.appendChild(cont);
 
                 if (data.turn == data.caller && data.turn == playerID) {
-                    update(ref(db, "rooms/" + room), {
-                        callingOver: true,
-                    })
-                    .catch((error)=>{
-                        alert(error);
-                    });
-
                     drawAllCards(submitTrumpCard);
+                    console.log(data.callingOver);
                     
                     const trumpCont = document.createElement("div");
                     trumpCont.id = "selectTrump";
@@ -277,7 +271,7 @@
                 }
             }
             
-            else if (data.callingOver && data.turn == playerID && Object.values(players).every(player => Array.isArray(player.cards) && player.cards.length === 0)) {
+            else if (data.callingOver && !data.secondDeal && data.turn == playerID && Object.values(players).every(player => Array.isArray(player.cards) && player.cards.length === 0)) {
                 // Game over, did caller win, distribute winnings, reset game for another one
                 var callerWin = (data.curPoints >= data.callPoints);
 
@@ -330,6 +324,7 @@
                     trumpcardRevealed: false,
                     started: false,
                     callingOver: false,
+                    secondDeal: false,
                     lastWinner: "",
                 })
                 .catch((error)=>{
@@ -436,6 +431,7 @@
                     cont.id = "turnInfo";
                     cont.innerText = "YOUR TURN";
                     alerts.appendChild(cont);
+                    console.log("your turn")
 
                     drawAllCards(playCardNoTrump);
                 }
@@ -740,7 +736,7 @@
                 cardDiv.id = card;
                 cardDiv.classList.add("card");
                 if (onMove != null) {
-                    cardDiv.onclick = () => submitTrumpCard(card);
+                    cardDiv.onclick = () => onMove(card);
                 }
 
                 myCards.appendChild(cardDiv);
@@ -755,7 +751,7 @@
                 cardDiv.setAttribute("data-value", value);
                 cardDiv.classList.add("card")
 
-                middleCards.appendChild(cardDiv);
+                middleTable.appendChild(cardDiv);
             }
 
             for (const name in players) {
@@ -868,6 +864,7 @@
                 players: players,
                 trumpcard: c,
                 secondDeal: true,
+                callingOver: true,
             })
             .catch((error)=>{
                 alert(error);
@@ -875,11 +872,20 @@
         }
 
         function playCardNoTrump(c) {
+            var newTurn;
+            var playerList = Object.keys(data.players);
+
+            if (playerList.indexOf(data.turn) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(data.turn) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
             if (middleCards.length == 0) {
                 players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
                 document.getElementById("turnInfo").remove();
             
-                var [value, suit] = card.split(" ");
+                var [value, suit] = c.split(" ");
 
                 if (value == "A" || value == "10") {
                     curPoints++;
@@ -889,7 +895,7 @@
                     curPoints += 3;
                 }
 
-                middleCards.append(c);
+                middleCards.push(c);
                 
                 update(ref(db, "rooms/" + room), {
                     players: players,
@@ -897,6 +903,7 @@
                     curPoints: curPoints,
                     curWinner: playerID,
                     curSuit: suit,
+                    turn: newTurn,
                 })
                 .catch((error)=>{
                     alert(error);
@@ -912,7 +919,7 @@
             players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
             document.getElementById("turnInfo").remove();
             
-            var [value, suit] = card.split(" ");
+            var [value, suit] = c.split(" ");
 
             if (value == "A" || value == "10") {
                 curPoints++;
@@ -934,13 +941,14 @@
                 }
             }
 
-            middleCards.append(c);
+            middleCards.push(c);
 
             if (!newCurWinner) {
                 update(ref(db, "rooms/" + room), {
                     players: players,
                     curCards: middleCards,
                     curPoints: curPoints,
+                    turn: newTurn,
                 })
                 .catch((error)=>{
                     alert(error);
@@ -951,6 +959,7 @@
                     curCards: middleCards,
                     curPoints: curPoints,
                     curWinner: playerID,
+                    turn, newTurn,
                 })
                 .catch((error)=>{
                     alert(error);
@@ -959,11 +968,20 @@
         }
 
         function playCardTrump(c) {
+            var newTurn;
+            var playerList = Object.keys(data.players);
+
+            if (playerList.indexOf(data.turn) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(data.turn) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
             if (middleCards.length == 0) {
                 players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
                 document.getElementById("turnInfo").remove();
             
-                var [value, suit] = card.split(" ");
+                var [value, suit] = c.split(" ");
 
                 if (value == "A" || value == "10") {
                     curPoints++;
@@ -973,7 +991,7 @@
                     curPoints += 3;
                 }
 
-                middleCards.append(c);
+                middleCards.push(c);
                 
                 update(ref(db, "rooms/" + room), {
                     players: players,
@@ -981,6 +999,7 @@
                     curPoints: curPoints,
                     curWinner: playerID,
                     curSuit: suit,
+                    turn: newTurn,
                 })
                 .catch((error)=>{
                     alert(error);
@@ -992,7 +1011,7 @@
             players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
             document.getElementById("turnInfo").remove();
             
-            var [value, suit] = card.split(" ");
+            var [value, suit] = c.split(" ");
 
             if (hand.some(str => str.includes(curSuit)) && suit != curSuit) {
                 return;
@@ -1031,13 +1050,14 @@
                 }
             }
 
-            middleCards.append(c);
+            middleCards.push(c);
 
             if (!newCurWinner) {
                 update(ref(db, "rooms/" + room), {
                     players: players,
                     curCards: middleCards,
                     curPoints: curPoints,
+                    turn: newTurn,
                 })
                 .catch((error)=>{
                     alert(error);
@@ -1048,6 +1068,7 @@
                     curCards: middleCards,
                     curPoints: curPoints,
                     curWinner: playerID,
+                    turn: newTurn,
                 })
                 .catch((error)=>{
                     alert(error);
