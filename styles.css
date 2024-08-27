@@ -1,0 +1,134 @@
+.body-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    height: 100vh;
+    background-color: #292929;
+    margin: 0px;
+}
+
+.container {
+    background-color: #0058aa;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 2rem;
+    gap: 1rem;
+    border-radius: 1rem;
+    filter: drop-shadow(5px 5px 10px #000000);
+}
+
+.container > h1 {
+    color: white;
+    font-size: 5rem;
+    font-weight: 2rem;
+    margin: 0px;
+}
+
+h2 {
+    position: fixed;
+    color: white;
+    font-size: 2rem;
+    font-weight: 2rem;
+    margin: 0px;
+    top: 0;
+    left: 0;
+    padding: 5px;
+}
+
+.container > input {
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    font-size: 2rem;
+}
+
+.container > button {
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    font-size: 2rem;
+}
+
+.container > ul {
+    list-style-type: none;
+    color: white;
+    padding-left: 0;
+    margin: 0;
+    font-size: 1.5rem;
+    background-color: #246bad;
+    padding: 0.5rem;
+    border-radius: 1rem;
+    width: 50%;
+}
+
+.me {
+    color: #fff200;
+}
+
+.hidden {
+    display: none;
+}
+
+.card-container {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    font-size: 1.5rem;
+    position: relative;
+}
+
+.my-cards {
+    position: absolute;
+    bottom: 10%;
+    left: 30%;
+}
+
+.opponent-table {
+    position: absolute;
+    top: 15%;
+    display: flex;
+    flex-direction: row;
+    gap: 5%;
+    width: 100%;
+    justify-content: space-evenly;
+}
+
+.table {
+    height: 100%;
+    width: 100%;
+}
+
+.name-tag {
+    position: relative;
+    font-size: 2.5rem;
+    color: white;
+    bottom: 110%;
+    margin: 0px;
+}
+
+.alert {
+    position: fixed;
+    bottom: 5%;
+    left: 5%;
+    font-size: 2rem;
+    color: white;
+}
+
+.trumpcard {
+    position: fixed;
+    right: 1%;
+    bottom: 1%;
+    font-size: 1rem;
+}
+
+#trumpLabel {
+    color: white;
+}
+
+.table-middle {
+    position: absolute;
+    top: 45%;
+    width: 100%;
+}

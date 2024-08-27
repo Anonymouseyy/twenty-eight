@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <link href="styles.css" rel="stylesheet">
+        <link href="card.css" rel="stylesheet">
+
+        <script src="card.js" defer></script>
+
+        <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+        <link rel="manifest" href="site.webmanifest">
+ 
+        <title>Twenty Eight</title>
+    </head>
+
+    <body class="body-content">
+        <div class="container" id="start">
+            <h1>28</h1>
+            <input type="text" placeholder="Name" id="name"/>
+            <input type="text" placeholder="Room Code" id="code"/>
+            <button id="join">Join Room</button>
+            <button id="create">Create Room</button>
+        </div>
+
+        <h2 class="hidden" id="roomCode">Room Code: 6PYX1</h2>
+        <div class="container hidden" id="lobby">
+            <h1>28</h1>
+            <ul id="playerList">
+            </ul>
+            <button id="startGame">Start Game</button>
+            <button id="leave">Leave Game</button>
+        </div>
+
+        <div class="hidden table" id="playingTable">
+            <div class="opponent-table" id="oppTable">
+
+            </div>
+
+            <div class="table-middle card-container" id="tableMiddle">
+
+            </div>
+
+            <div class="my-cards card-container" id="myCards">
+                
+            </div>
+
+            <div class="alert" id="alerts">
+
+            </div>
+
+            <div class="trumpcard" id="trumpcard">
+
+            </div>
+        </div>
+    </body>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
+
+        // Your web app"s Firebase configuration
+        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+        const firebaseConfig = {
+            apiKey: "AIzaSyAoUBDg6zn_-nmzB949LfQLE3cBF6U8VTs",
+            authDomain: "twenty-eight-a7ba6.firebaseapp.com",
+            databaseURL: "https://twenty-eight-a7ba6-default-rtdb.firebaseio.com",
+            projectId: "twenty-eight-a7ba6",
+            storageBucket: "twenty-eight-a7ba6.appspot.com",
+            messagingSenderId: "566672343220",
+            appId: "1:566672343220:web:1bdff83862b9f2e23c17e1",
+            measurementId: "G-982J38XWP6"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+
+        import { getDatabase, set, get, update, remove, ref, child, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+        const db = getDatabase();
+
+        var nameIn = document.querySelector("#name");
+        var codeIn = document.querySelector("#code");
+  
+        var joinBtn = document.querySelector("#join");
+        var createBtn = document.querySelector("#create");
+        var leaveBtn = document.querySelector("#leave");
+        var startBtn = document.querySelector("#startGame");
+
+        var room;
+        var playerID;
+        var started = false;
+        var listeners = [];
+        var players;
+        var hand = [];
+        var middleCards = [];
+        var turn;
+        var callPoints;
+        var trumpcardRevealed;
+        var curPoints;
+        var curSuit;
+        var trumpcard = "";
+        var caller;
+
+        const cardOrder = ["7", "8", "Q", "K", "10", "A", "9", "J"];
+
+        function reset() {
+            room = null;
+            playerID = null;
+            started = false;
+            players = null;
+
+            document.getElementById("start").classList.remove("hidden");
+            document.getElementById("roomCode").classList.add("hidden");
+            document.getElementById("lobby").classList.add("hidden");
+
+            var ul = document.getElementById("playerList");
+
+            while(ul.firstChild) {
+                ul.removeChild(ul.firstChild);
+            }
+            
+            for (const ref of listeners) {
+                off(ref);
+            }
+            listeners = [];
+
+            var myCards = document.getElementById("myCards");
+            var middleTable = document.getElementById("tableMiddle");
+            var oppTable = document.getElementById("oppTable");
+
+            while(myCards.firstChild) {
+                myCards.removeChild(myCards.firstChild);
+            }
+
+            while(middleTable.firstChild) {
+                middleTable.removeChild(middleTable.firstChild);
+            }
+
+            while(oppTable.firstChild) {
+                oppTable.removeChild(oppTable.firstChild);
+            }
+        }
+        
+        function addPlayers(snapshot) {
+            players = snapshot.val();
+            var ul = document.getElementById("playerList");
+
+            while(ul.firstChild) {
+                ul.removeChild(ul.firstChild);
+            }
+                        
+            for (const name in players) {
+                var li = document.createElement("li");
+                li.appendChild(document.createTextNode(name));
+                li.setAttribute("id", name);
+                ul.appendChild(li);
+                
+                if (name == playerID) {
+                    li.classList.add("me");
+                }
+            }
+        }
+
+        async function updateGame(snapshot) {
+            const data = snapshot.val();
+
+            if ("curCards" in data) {
+                middleCards = data.curCards;
+            } else {
+                middleCards = [];
+            }
+
+            if (data.players[playerID].cards) {
+                hand = data.players[playerID].cards;
+            } else {
+                hand = [];
+            }
+
+            players = data.players;
+            started = data.started;
+            callPoints = data.callPoints;
+            trumpcardRevealed = data.trumpcardRevealed;
+            curPoints = data.curPoints;
+            curSuit = data.curSuit;
+            caller = data.caller;
+            trumpcard = data.trumpcard;
+
+            if (data.lastWinner) {
+                if (document.getElementById("lastWinner")) { document.getElementById("lastWinner").remove(); }
+                
+                const alerts = document.querySelector("#alerts");
+                const cont = document.createElement("div");
+                cont.id = "lastWinner";
+                cont.innerText = `${data.lastWinner} won last btw`;
+                alerts.appendChild(cont);
+            }
+
+            drawAllCards();
+
+            if (!data.started) {
+                if (!(data.turn == playerID)) {
+                    return;
+                }
+
+                for (let i = 0; i < 4; i++) {
+                    const idx = Math.floor(Math.random() * data.cards.length);
+                    const card = data.cards[idx];
+
+                    data.cards.splice(idx, 1);
+                    newHand.push(card);
+                }
+
+                hand = [...newHand];
+                data.players[playerID].cards = hand;
+
+                var newTurn;
+                var playerList = Object.keys(data.players);
+
+                if (playerList.indexOf(data.turn) < playerList.length-1) {
+                    newTurn = playerList[playerList.indexOf(data.turn) + 1];
+                } else {
+                    newTurn = playerList[0];
+                }
+
+                update(ref(db, "rooms/" + room), {
+                    cards: data.cards,
+                    players: data.players,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+
+                drawAllCards();
+            }
+
+            else if (!data.callingOver && !data.secondDeal) {
+                if (document.getElementById("bidInfo")) {
+                    document.getElementById("bidInfo").remove();
+                }
+                    
+                const alerts = document.querySelector("#alerts");
+                const cont = document.createElement("div");
+                cont.id = "bidInfo";
+                cont.innerText = `Caller: ${data.caller} Bid: ${data.callPoints}`;
+                alerts.appendChild(cont);
+
+                if (data.turn == data.caller && data.turn == playerID) {
+                    drawAllCards(submitTrumpCard);
+                    console.log(data.callingOver);
+                    
+                    const trumpCont = document.createElement("div");
+                    trumpCont.id = "selectTrump";
+                    trumpCont.innerText = "Select a Trump Card";
+                    alerts.appendChild(trumpCont);
+                }
+
+                else if (data.turn == playerID) {
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+                    cont.id = "bidContainer";
+
+                    const label = document.createElement("div");
+                    label.innerHTML = "Bid: ";
+                    cont.appendChild(label);
+
+                    const numberInput = document.createElement("input");
+                    numberInput.type = "number";
+                    numberInput.min = "14";
+                    numberInput.max = "28";
+                    numberInput.id = "bid";
+                    numberInput.placeholder = "Bid";
+                    cont.appendChild(numberInput);
+
+                    const enterBtn = document.createElement("button");
+                    enterBtn.id = "enterBid";
+                    enterBtn.textContent = "Submit Bid";
+                    enterBtn.addEventListener("click", enterBid);
+                    cont.appendChild(enterBtn);
+
+                    const skipBtn = document.createElement("button");
+                    skipBtn.id = "skipBid";
+                    skipBtn.textContent = "Skip";
+                    skipBtn.addEventListener("click", skipBid);
+                    cont.appendChild(skipBtn);
+
+                    alerts.appendChild(cont);
+                }
+            }
+            
+            else if (data.callingOver && !data.secondDeal && data.turn == playerID && Object.values(players).every(player => Array.isArray(player.cards) && player.cards.length === 0)) {
+                // Game over, did caller win, distribute winnings, reset game for another one
+                var callerWin = (data.curPoints >= data.callPoints);
+
+                if (callerWin) {
+                    players[data.caller].chips + Object.keys(obj).length-1;
+                    
+                    for (let player in players) {
+                        if (player == data.caller) { continue; }
+
+                        players[player].chips--;
+                    }
+                } else {
+                    players[data.caller].chips - Object.keys(obj).length-1;
+                    
+                    for (let player in players) {
+                        if (player == data.caller) { continue; }
+
+                        players[player].chips++;
+                    }
+                }
+
+
+                for (let i = 0; i < 5; i++) {
+                    roomID += characters.charAt(Math.floor(Math.random() * charactersLength));
+                }
+
+                const suits = ["spade", "heart", "diamond", "club"];
+                const ranks = ["A", "K", "Q", "J", "10", "9"];
+                const cards = {};
+                let index = 0;
+
+                for (const suit of suits) {
+                    for (const rank of ranks) {
+                        cards[index] = `${rank} ${suit}`;
+                        index++;
+                    }
+                }
+
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    turn: playerID,
+                    trumpcard: "",
+                    callPoints: 0,
+                    curPoints: 0,
+                    callerPoints: 0,
+                    curSuit: "",
+                    caller: "",
+                    cards: cards,
+                    curWinner: "",
+                    trumpcardRevealed: false,
+                    started: false,
+                    callingOver: false,
+                    secondDeal: false,
+                    lastWinner: "",
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            }
+
+            else if (data.callingOver && data.secondDeal && data.turn == playerID) {
+                if (players[playerID].cards.length == 7 || players[playerID].cards.length == 8) {
+                    update(ref(db, "rooms/" + room), {
+                        secondDeal: false,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+                } else {
+                    for (let i = 0; i < 4; i++) {
+                        const idx = Math.floor(Math.random() * data.cards.length);
+                        const card = data.cards[idx];
+
+                        data.cards.splice(idx, 1);
+                        hand.push(card);
+                    }
+
+                    data.players[playerID].cards = hand;
+                    var newTurn;
+                    var playerList = Object.keys(data.players);
+
+                    if (playerList.indexOf(data.turn) < playerList.length-1) {
+                        newTurn = playerList[playerList.indexOf(data.turn) + 1];
+                    } else {
+                        newTurn = playerList[0];
+                    }
+
+                    update(ref(db, "rooms/" + room), {
+                        cards: data.cards,
+                        players: data.players,
+                        turn: newTurn,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+                }
+            }
+        
+            else if (data.callingOver && !data.secondDeal && data.turn == playerID) {
+                if (Object.keys(players).length == middleCards.length) {
+                    // Figure out winner, add points, transition turn, alert players
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+
+                    if (data.curWinner == data.caller) {
+                        data.callerPoints += data.curPoints;
+                    }
+
+                    update(ref(db, "rooms/" + room), {
+                        turn: data.curWinner,
+                        callerPoints: data.callerPoints,
+                        curPoints: 0,
+                        curCards: [],
+                        curWinner: "",
+                        curSuit: "",
+                        lastWinner: data.curWinner,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+                }
+
+                else if (curSuit && !trumpcardRevealed && !hand.some(str => str.includes(curSuit))) {
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+
+                    const revealBtn = document.createElement("button");
+                    revealBtn.id = "reveal";
+                    revealBtn.textContent = "Reveal Trump Card";
+                    revealBtn.addEventListener("click", showTrumpCard);
+
+                    cont.appendChild(revealBtn);
+                    alerts.appendChild(cont);
+                }
+
+                else if (trumpcardRevealed) {
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+                    cont.id = "turnInfo";
+                    cont.innerText = "YOUR TURN";
+                    alerts.appendChild(cont);
+
+                    drawAllCards(playCardTrump);
+                }
+
+                else {
+                    const alerts = document.querySelector("#alerts");
+                    const cont = document.createElement("div");
+                    cont.id = "turnInfo";
+                    cont.innerText = "YOUR TURN";
+                    alerts.appendChild(cont);
+
+                    drawAllCards(playCardNoTrump);
+                }
+            }
+        }
+
+        function startUpdate(s) {
+            started = s.val();
+
+            if (started == true) {
+                document.getElementById("lobby").classList.add("hidden");
+                document.getElementById("playingTable").classList.remove("hidden");
+                const dbref = ref(db);
+                var newHand = [];
+
+                get(child(dbref, "rooms/" + room))
+                .then((snapshot) => {
+                    if(snapshot.exists()){
+                        var data = snapshot.val();
+
+                        if (!(data.turn == playerID)) {
+                            startUpdate(s);
+                            return;
+                        }
+
+                        for (let i = 0; i < 4; i++) {
+                            const idx = Math.floor(Math.random() * data.cards.length);
+                            const card = data.cards[idx];
+
+                            data.cards.splice(idx, 1);
+                            newHand.push(card);
+                        }
+
+                        hand = [...newHand];
+                        data.players[playerID].cards = hand;
+
+                        var newTurn;
+                        var playerList = Object.keys(data.players);
+
+                        if (playerList.indexOf(data.turn) < playerList.length-1) {
+                            newTurn = playerList[playerList.indexOf(data.turn) + 1];
+                        } else {
+                            newTurn = playerList[0];
+                        }
+
+                        update(ref(db, "rooms/" + room), {
+                            cards: data.cards,
+                            players: data.players,
+                            turn: newTurn,
+                        })
+                        .catch((error)=>{
+                            alert(error);
+                        });
+
+                        for (const ref of listeners) {
+                            off(ref);
+                        }
+
+                        var roomRef = ref(db, "rooms/"+room);
+                        listeners = [roomRef];
+
+                        onValue(roomRef, (snapshot) => updateGame(snapshot), (error) => {
+                            console.error("Error listening to changes:", error);
+                        });
+
+                        drawAllCards();
+                    } else {
+                        alert("Room does not exist");
+                        leaveRoom();
+                    }
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            } else {
+                document.getElementById("lobby").classList.remove("hidden");
+                document.getElementById("playingTable").classList.add("hidden");
+            }
+        }
+
+        function createRoom() {
+            const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let roomID = "";
+            const charactersLength = characters.length;
+
+            for (let i = 0; i < 5; i++) {
+                roomID += characters.charAt(Math.floor(Math.random() * charactersLength));
+            }
+
+            const suits = ["spade", "heart", "diamond", "club"];
+            const ranks = ["A", "K", "Q", "J", "10", "9"];
+            const cards = {};
+            let index = 0;
+
+            for (const suit of suits) {
+                for (const rank of ranks) {
+                    cards[index] = `${rank} ${suit}`;
+                    index++;
+                }
+            }
+
+            playerID = nameIn.value;
+
+            set(ref(db, "rooms/" + roomID),{
+                players: {
+                    [playerID]: {
+                        chips: 0,
+                    }
+                },
+                turn: playerID,
+                trumpcard: "",
+                callPoints: 0,
+                curPoints: 0,
+                callerPoints: 0,
+                curSuit: "",
+                caller: "",
+                cards: cards,
+                curWinner: "",
+                trumpcardRevealed: false,
+                started: false,
+                callingOver: false,
+                lastWinner: "",
+            })
+            .then(()=>{
+                console.log("Room Created");
+
+                room = roomID;
+                playerID = nameIn.value;
+                players = {
+                    playerID: {
+                        chips: 0,
+                    }
+                }
+
+                document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
+                document.getElementById("start").classList.add("hidden");
+                document.getElementById("roomCode").classList.remove("hidden");
+                document.getElementById("lobby").classList.remove("hidden");
+
+                var ul = document.getElementById("playerList");
+                var li = document.createElement("li");
+                li.appendChild(document.createTextNode(name.value));
+                li.setAttribute("id", playerID);
+                ul.appendChild(li);
+                li.classList.add("me");
+
+                var playersRef = ref(db, "rooms/"+room+"/players");
+
+                onValue(playersRef, (snapshot) => addPlayers(snapshot), (error) => {
+                    console.error("Error listening to changes: ", error);
+                });
+
+                var startedRef = ref(db, "rooms/"+room+"/started");
+
+                onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
+                    console.error("Error listening to changes:", error);
+                });
+
+                listeners.push(playersRef);
+                listeners.push(startedRef);
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+        }
+
+        function joinRoom() {
+            const dbref = ref(db);
+
+            if (code.value == "") {
+                alert("Please enter a code");
+                return;
+            }
+
+            get(child(dbref, "rooms/" + codeIn.value))
+            .then((snapshot)=>{
+                if(snapshot.exists()){
+                    var data = snapshot.val();
+
+                    for (const name in data.players) {
+                        if (name == nameIn.value) {
+                            alert("Someone in room has the same name");
+                            return;
+                        }
+                    }
+
+                    room = codeIn.value;
+                    playerID = nameIn.value;
+                    data.players[playerID] = {
+                        chips: 0,
+                    }
+                    players = data.players;
+
+                    document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
+                    document.getElementById("start").classList.add("hidden");
+                    document.getElementById("roomCode").classList.remove("hidden");
+                    document.getElementById("lobby").classList.remove("hidden");
+
+                    update(ref(db, "rooms/" + room), {
+                        players: players,
+                    })
+                    .catch((error)=>{
+                        alert(error);
+                    });
+
+                    var ul = document.getElementById("playerList");
+                    for (const name in players) {
+                        var li = document.createElement("li");
+                        li.appendChild(document.createTextNode(name));
+                        li.setAttribute("id", playerID);
+                        ul.appendChild(li);
+
+                        if (name == playerID) {
+                            li.classList.add("me");
+                        }
+                    }
+
+                    var playersRef = ref(db, "rooms/"+room+"/players");
+
+                    onValue(playersRef, (snapshot) => addPlayers(snapshot), (error) => {
+                        console.error("Error listening to changes:", error);
+                    });
+
+                    var startedRef = ref(db, "rooms/"+room+"/started");
+
+                    onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
+                        console.error("Error listening to changes:", error);
+                    });
+
+                    listeners.push(playersRef);
+                    listeners.push(startedRef);
+                } else {
+                    alert("No room with entered code");
+                }
+            })
+            .catch((error)=>{
+                alert(error);
+            })
+        }
+
+        function leaveRoom() {
+            delete players[playerID];
+
+            if (Object.keys(players).length === 0) {
+                remove(ref(db, "rooms/" + room))
+                .catch((error)=>{
+                    alert(error);
+                });
+            } else {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            }
+
+            reset();
+        }
+
+        function startGame() {
+            started = true;
+            console.log(room)
+
+            update(ref(db, "rooms/" + room), {
+                started: true,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+        }
+
+        function drawAllCards(onMove=null) {
+            var myCards = document.getElementById("myCards");
+            var middleTable = document.getElementById("tableMiddle");
+            var oppTable = document.getElementById("oppTable");
+
+            while(myCards.firstChild) {
+                myCards.removeChild(myCards.firstChild);
+            }
+
+            while(middleTable.firstChild) {
+                middleTable.removeChild(middleTable.firstChild);
+            }
+
+            while(oppTable.firstChild) {
+                oppTable.removeChild(oppTable.firstChild);
+            }
+
+            var selfNameTag = document.createElement("h3");
+            selfNameTag.innerHTML = `Me\n${players[playerID].chips}`;
+            selfNameTag.classList.add("name-tag");
+            myCards.appendChild(selfNameTag);
+
+            for (var i = 0; i < hand.length; i++) {
+                let card = hand[i];
+                let [value, suit] = card.split(" ");
+                let cardDiv = document.createElement("div");
+
+                cardDiv.setAttribute("data-suit", suit);
+                cardDiv.setAttribute("data-value", value);
+                cardDiv.id = card;
+                cardDiv.classList.add("card");
+                if (onMove != null) {
+                    cardDiv.onclick = () => onMove(card);
+                }
+
+                myCards.appendChild(cardDiv);
+            }
+
+            for (var i = 0; i < middleCards.length; i++) {
+                var card = middleCards[i];
+                var [value, suit] = card.split(" ");
+                var cardDiv = document.createElement("div");
+
+                cardDiv.setAttribute("data-suit", suit);
+                cardDiv.setAttribute("data-value", value);
+                cardDiv.classList.add("card")
+
+                middleTable.appendChild(cardDiv);
+            }
+
+            for (const name in players) {
+                if (!("cards" in players[name]) || name == playerID) {
+                    continue;
+                }
+
+                var cardsDiv = document.createElement("div");
+                cardsDiv.classList.add("card-container");
+                cardsDiv.setAttribute("id", name);
+
+                var nameTag = document.createElement("h3");
+                nameTag.classList.add("name-tag");
+                nameTag.innerHTML = `${name} ${players[name].chips}`;
+
+                cardsDiv.appendChild(nameTag);
+
+                for (var i = 0; i < players[name].cards.length; i++) {
+                    var card = players[name].cards[i];
+                    var cardDiv = document.createElement("div");
+
+                    cardDiv.setAttribute("data-value", "back");
+                    cardDiv.classList.add("card")
+
+                    cardsDiv.appendChild(cardDiv);
+                }
+
+                oppTable.appendChild(cardsDiv);
+            }
+
+            if (trumpcardRevealed) {
+                const trumpDiv = document.getElementById("trumpcard");
+
+                while (trumpDiv.firstChild) {
+                    trumpDiv.removeChild(trumpDiv.firstChild);
+                }
+
+                let [value, suit] = trumpcard.split(" ");
+                let cardDiv = document.createElement("div");
+
+                const label = document.createElement("h3");
+                label.textContent = "Trump Card";
+                label.id = "trumpLabel";
+
+                cardDiv.setAttribute("data-suit", suit);
+                cardDiv.setAttribute("data-value", value);
+                cardDiv.id = trumpcard;
+                cardDiv.classList.add("card");
+
+                trumpDiv.append(label);
+                trumpDiv.append(cardDiv);
+            }
+        }
+
+        function enterBid() {
+            var value = parseInt(document.getElementById("bid").value);
+
+            if (value < 14) {
+                value = 14;
+            } else if (value > 28) {
+                value = 28;
+            }
+
+            if (value <= callPoints) {
+                return;
+            }
+
+            var newTurn;
+            var playerList = Object.keys(players);
+
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
+            update(ref(db, "rooms/" + room), {
+                callPoints: value,
+                caller: playerID,
+                turn: newTurn,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+
+            document.getElementById("bidContainer").remove();
+        }
+
+        function skipBid() {
+            console.log("skip");
+            var newTurn;
+            var playerList = Object.keys(players);
+
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
+            update(ref(db, "rooms/" + room), {
+                turn: newTurn,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+
+            document.getElementById("bidContainer").remove();
+        }
+
+        function submitTrumpCard(c) {
+            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+            document.getElementById("selectTrump").remove();
+
+            update(ref(db, "rooms/" + room), {
+                players: players,
+                trumpcard: c,
+                secondDeal: true,
+                callingOver: true,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+        }
+
+        function playCardNoTrump(c) {
+            var newTurn;
+            var playerList = Object.keys(players);
+
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
+            if (middleCards.length == 0) {
+                players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+                document.getElementById("turnInfo").remove();
+            
+                var [value, suit] = c.split(" ");
+
+                if (value == "A" || value == "10") {
+                    curPoints++;
+                } else if (value == "9") {
+                    curPoints += 2;
+                } else if (value == "J") {
+                    curPoints += 3;
+                }
+
+                middleCards.push(c);
+                
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    curWinner: playerID,
+                    curSuit: suit,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+
+                return;
+            }
+
+            var [value, suit] = c.split(" ");
+
+            if (curSuit != suit) {
+                console.log(suit);
+                return;
+            }
+
+            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+            document.getElementById("turnInfo").remove();
+
+            if (value == "A" || value == "10") {
+                curPoints++;
+            } else if (value == "9") {
+                curPoints += 2;
+            } else if (value == "J") {
+                curPoints += 3;
+            }
+
+            var newCurWinner = true;
+
+            for (var i = 0; i < middleCards.length; i++) {
+                var card = middleCards[i];
+                var [cvalue, csuit] = card.split(" ");
+                console.log(cardOrder.indexOf(cvalue));
+                console.log(cardOrder.indexOf(value));
+                
+                if (cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
+                    newCurWinner = false;
+                    break;
+                }
+            }
+
+            middleCards.push(c);
+
+            if (!newCurWinner) {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            } else {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    curWinner: playerID,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            }
+        }
+
+        function playCardTrump(c) {
+            var newTurn;
+            var playerList = Object.keys(players);
+
+            if (playerList.indexOf(playerID) < playerList.length-1) {
+                newTurn = playerList[playerList.indexOf(playerID) + 1];
+            } else {
+                newTurn = playerList[0];
+            }
+
+            if (middleCards.length == 0) {
+                players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+                document.getElementById("turnInfo").remove();
+            
+                var [value, suit] = c.split(" ");
+
+                if (value == "A" || value == "10") {
+                    curPoints++;
+                } else if (value == "9") {
+                    curPoints += 2;
+                } else if (value == "J") {
+                    curPoints += 3;
+                }
+
+                middleCards.push(c);
+                
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    curWinner: playerID,
+                    curSuit: suit,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+
+                return;
+            }
+
+            var [value, suit] = c.split(" ");
+
+            if (hand.some(str => str.includes(curSuit)) && suit != curSuit) {
+                return;
+            }
+
+            players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
+            document.getElementById("turnInfo").remove();
+
+            var [tvalue, tsuit] = trumpcard.split(" ");
+
+            if (value == "A" || value == "10") {
+                curPoints++;
+            } else if (value == "9") {
+                curPoints += 2;
+            } else if (value == "J") {
+                curPoints += 3;
+            }
+
+            var newCurWinner = true;
+            var trumpSuit = (suit == tsuit);
+
+            for (var i = 0; i < middleCards.length; i++) {
+                var card = middleCards[i];
+                var [cvalue, csuit] = card.split(" ");
+
+                if (trumpSuit && csuit == tsuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
+                    newCurWinner = false;
+                    break;
+                }
+                
+                else if (!trumpSuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
+                    newCurWinner = false;
+                    break;
+                }
+                 
+                else if (!trumpSuit && csuit == tsuit) {
+                    newCurWinner = false;
+                    break;
+                }
+            }
+
+            middleCards.push(c);
+
+            if (!newCurWinner) {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            } else {
+                update(ref(db, "rooms/" + room), {
+                    players: players,
+                    curCards: middleCards,
+                    curPoints: curPoints,
+                    curWinner: playerID,
+                    turn: newTurn,
+                })
+                .catch((error)=>{
+                    alert(error);
+                });
+            }
+        }
+
+        function showTrumpCard() {
+            players[caller].cards.push(trumpcard);
+
+            update(ref(db, "rooms/" + room), {
+                trumpcardRevealed: true,
+                players: players,
+            })
+            .catch((error)=>{
+                alert(error);
+            });
+
+            document.getElementById("reveal").remove();
+        }
+
+        createBtn.addEventListener("click", createRoom);
+        joinBtn.addEventListener("click", joinRoom);
+        leaveBtn.addEventListener("click", leaveRoom);
+        startBtn.addEventListener("click", startGame);
+
+        window.addEventListener("unload", function () {
+            leaveRoom();
+        });
+    </script>
+</html>
