@@ -5,6 +5,11 @@
         <link href="card.css" rel="stylesheet">
 
         <script src="card.js" defer></script>
+
+        <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+        <link rel="manifest" href="site.webmanifest">
  
         <title>Twenty Eight</title>
     </head>
@@ -168,8 +173,13 @@
                 middleCards = [];
             }
 
+            if (data.players[playerID].cards) {
+                hand = data.players[playerID].cards;
+            } else {
+                hand = [];
+            }
+
             players = data.players;
-            hand = data.players[playerID].cards;
             started = data.started;
             callPoints = data.callPoints;
             trumpcardRevealed = data.trumpcardRevealed;
@@ -177,6 +187,16 @@
             curSuit = data.curSuit;
             caller = data.caller;
             trumpcard = data.trumpcard;
+
+            if (data.lastWinner) {
+                if (document.getElementById("lastWinner")) { document.getElementById("lastWinner").remove(); }
+                
+                const alerts = document.querySelector("#alerts");
+                const cont = document.createElement("div");
+                cont.id = "lastWinner";
+                cont.innerText = `${data.lastWinner} won last btw`;
+                alerts.appendChild(cont);
+            }
 
             drawAllCards();
 
@@ -371,16 +391,6 @@
             }
         
             else if (data.callingOver && !data.secondDeal && data.turn == playerID) {
-                if (data.lastWinner) {
-                    document.getElementById("lastWinner").remove();
-
-                    const alerts = document.querySelector("#alerts");
-                    const cont = document.createElement("div");
-                    cont.id = "lastWinner";
-                    cont.innerText = `${data.lastWinner} won last btw`;
-                    alerts.appendChild(cont);
-                }
-
                 if (Object.keys(players).length == middleCards.length) {
                     // Figure out winner, add points, transition turn, alert players
                     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -395,6 +405,7 @@
                         curPoints: 0,
                         curCards: [],
                         curWinner: "",
+                        curSuit: "",
                         lastWinner: data.curWinner,
                     })
                     .catch((error)=>{
@@ -431,7 +442,6 @@
                     cont.id = "turnInfo";
                     cont.innerText = "YOUR TURN";
                     alerts.appendChild(cont);
-                    console.log("your turn")
 
                     drawAllCards(playCardNoTrump);
                 }
@@ -722,7 +732,7 @@
             }
 
             var selfNameTag = document.createElement("h3");
-            selfNameTag.innerHTML = "Me";
+            selfNameTag.innerHTML = `Me\n${players[playerID].chips}`;
             selfNameTag.classList.add("name-tag");
             myCards.appendChild(selfNameTag);
 
@@ -765,7 +775,7 @@
 
                 var nameTag = document.createElement("h3");
                 nameTag.classList.add("name-tag");
-                nameTag.innerHTML = name;
+                nameTag.innerHTML = `${name} ${players[name].chips}`;
 
                 cardsDiv.appendChild(nameTag);
 
@@ -783,11 +793,12 @@
             }
 
             if (trumpcardRevealed) {
-                if (document.getElementById("trumpcard")) {
-                    document.getElementById("trumpcard").remove();
+                const trumpDiv = document.getElementById("trumpcard");
+
+                while (trumpDiv.firstChild) {
+                    trumpDiv.removeChild(trumpDiv.firstChild);
                 }
 
-                const trumpDiv = document.getElementById("trumpcard");
                 let [value, suit] = trumpcard.split(" ");
                 let cardDiv = document.createElement("div");
 
@@ -876,8 +887,6 @@
         }
 
         function playCardNoTrump(c) {
-            console.log(c);
-            console.log(curSuit);
             var newTurn;
             var playerList = Object.keys(players);
 
@@ -939,7 +948,7 @@
             var newCurWinner = true;
 
             for (var i = 0; i < middleCards.length; i++) {
-                var card = hand[i];
+                var card = middleCards[i];
                 var [cvalue, csuit] = card.split(" ");
                 console.log(cardOrder.indexOf(cvalue));
                 console.log(cardOrder.indexOf(value));
@@ -1040,7 +1049,7 @@
             var trumpSuit = (suit == tsuit);
 
             for (var i = 0; i < middleCards.length; i++) {
-                var card = hand[i];
+                var card = middleCards[i];
                 var [cvalue, csuit] = card.split(" ");
 
                 if (trumpSuit && csuit == tsuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
