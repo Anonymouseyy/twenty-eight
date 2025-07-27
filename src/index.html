@@ -5,11 +5,11 @@
         <link href="card.css" rel="stylesheet">
 
         <script src="card.js" defer></script>
+        <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 
         <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
         <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
         <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-        <link rel="manifest" href="site.webmanifest">
  
         <title>Twenty Eight</title>
     </head>
@@ -55,31 +55,9 @@
         </div>
     </body>
 
-    <script type="module">
-        // Import the functions you need from the SDKs you need
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
-
-        // Your web app"s Firebase configuration
-        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-        const firebaseConfig = {
-            apiKey: "AIzaSyAoUBDg6zn_-nmzB949LfQLE3cBF6U8VTs",
-            authDomain: "twenty-eight-a7ba6.firebaseapp.com",
-            databaseURL: "https://twenty-eight-a7ba6-default-rtdb.firebaseio.com",
-            projectId: "twenty-eight-a7ba6",
-            storageBucket: "twenty-eight-a7ba6.appspot.com",
-            messagingSenderId: "566672343220",
-            appId: "1:566672343220:web:1bdff83862b9f2e23c17e1",
-            measurementId: "G-982J38XWP6"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
-
-        import { getDatabase, set, get, update, remove, ref, child, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
-
-        const db = getDatabase();
+    <script>
+        // PeerJS is now available globally as Peer
+        const Peer = window.Peer;
 
         var nameIn = document.querySelector("#name");
         var codeIn = document.querySelector("#code");
@@ -89,10 +67,11 @@
         var leaveBtn = document.querySelector("#leave");
         var startBtn = document.querySelector("#startGame");
 
+        var peer;
         var room;
         var playerID;
         var started = false;
-        var listeners = [];
+        var connections = [];
         var players;
         var hand = [];
         var middleCards = [];
@@ -103,6 +82,8 @@
         var curSuit;
         var trumpcard = "";
         var caller;
+        var isHost = false;
+        var gameData = {};
 
         const cardOrder = ["7", "8", "Q", "K", "10", "A", "9", "J"];
 
@@ -111,6 +92,8 @@
             playerID = null;
             started = false;
             players = null;
+            isHost = false;
+            connections = [];
 
             document.getElementById("start").classList.remove("hidden");
             document.getElementById("roomCode").classList.add("hidden");
@@ -122,10 +105,13 @@
                 ul.removeChild(ul.firstChild);
             }
             
-            for (const ref of listeners) {
-                off(ref);
-            }
-            listeners = [];
+            // Close all peer connections
+            connections.forEach(conn => {
+                if (conn.open) {
+                    conn.close();
+                }
+            });
+            connections = [];
 
             var myCards = document.getElementById("myCards");
             var middleTable = document.getElementById("tableMiddle");
@@ -144,8 +130,7 @@
             }
         }
         
-        function addPlayers(snapshot) {
-            players = snapshot.val();
+        function addPlayers() {
             var ul = document.getElementById("playerList");
 
             while(ul.firstChild) {
@@ -162,25 +147,50 @@
                     li.classList.add("me");
                 }
             }
+            
+            // Hide start button for non-host players
+            const startButton = document.getElementById("startGame");
+            if (!isHost) {
+                startButton.classList.add("hidden");
+            } else {
+                startButton.classList.remove("hidden");
+            }
         }
 
-        async function updateGame(snapshot) {
-            const data = snapshot.val();
-
+        function updateGame(data) {
             if ("curCards" in data) {
                 middleCards = data.curCards;
             } else {
                 middleCards = [];
             }
 
-            if (data.players[playerID].cards) {
+            if (data.players[playerID] && data.players[playerID].cards) {
                 hand = data.players[playerID].cards;
             } else {
                 hand = [];
             }
 
             players = data.players;
+            
+            // Handle initial join - move to lobby if not already there
+            if (!isHost && document.getElementById("start").classList.contains("hidden") === false) {
+                document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
+                document.getElementById("start").classList.add("hidden");
+                document.getElementById("roomCode").classList.remove("hidden");
+                document.getElementById("lobby").classList.remove("hidden");
+            }
+            
+            addPlayers(); // Update the UI
+            
+            // Check if game just started - handle transition for all players
+            if (data.started && !started) {
+                // Transition to playing screen for all players
+                document.getElementById("lobby").classList.add("hidden");
+                document.getElementById("playingTable").classList.remove("hidden");
+            }
+            
             started = data.started;
+            
             callPoints = data.callPoints;
             trumpcardRevealed = data.trumpcardRevealed;
             curPoints = data.curPoints;
@@ -200,11 +210,9 @@
 
             drawAllCards();
 
-            if (!data.started) {
-                if (!(data.turn == playerID)) {
-                    return;
-                }
-
+            // Handle card dealing when game starts
+            if (data.started && data.turn == playerID && (!data.players[playerID].cards || data.players[playerID].cards.length === 0) && data.cards && data.cards.length > 0) {
+                var newHand = [];
                 for (let i = 0; i < 4; i++) {
                     const idx = Math.floor(Math.random() * data.cards.length);
                     const card = data.cards[idx];
@@ -225,15 +233,11 @@
                     newTurn = playerList[0];
                 }
 
-                update(ref(db, "rooms/" + room), {
-                    cards: data.cards,
-                    players: data.players,
-                    turn: newTurn,
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                data.turn = newTurn;
+                data.cards = data.cards;
+                data.players = data.players;
 
+                broadcastGameUpdate(data);
                 drawAllCards();
             }
 
@@ -296,7 +300,7 @@
                 var callerWin = (data.curPoints >= data.callPoints);
 
                 if (callerWin) {
-                    players[data.caller].chips + Object.keys(obj).length-1;
+                    players[data.caller].chips += Object.keys(players).length-1;
                     
                     for (let player in players) {
                         if (player == data.caller) { continue; }
@@ -304,7 +308,7 @@
                         players[player].chips--;
                     }
                 } else {
-                    players[data.caller].chips - Object.keys(obj).length-1;
+                    players[data.caller].chips -= Object.keys(players).length-1;
                     
                     for (let player in players) {
                         if (player == data.caller) { continue; }
@@ -313,6 +317,9 @@
                     }
                 }
 
+                const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+                let roomID = "";
+                const charactersLength = characters.length;
 
                 for (let i = 0; i < 5; i++) {
                     roomID += characters.charAt(Math.floor(Math.random() * charactersLength));
@@ -330,36 +337,29 @@
                     }
                 }
 
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                    turn: playerID,
-                    trumpcard: "",
-                    callPoints: 0,
-                    curPoints: 0,
-                    callerPoints: 0,
-                    curSuit: "",
-                    caller: "",
-                    cards: cards,
-                    curWinner: "",
-                    trumpcardRevealed: false,
-                    started: false,
-                    callingOver: false,
-                    secondDeal: false,
-                    lastWinner: "",
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                data.players = players;
+                data.turn = playerID;
+                data.trumpcard = "";
+                data.callPoints = 0;
+                data.curPoints = 0;
+                data.callerPoints = 0;
+                data.curSuit = "";
+                data.caller = "";
+                data.cards = cards;
+                data.curWinner = "";
+                data.trumpcardRevealed = false;
+                data.started = false;
+                data.callingOver = false;
+                data.secondDeal = false;
+                data.lastWinner = "";
+
+                broadcastGameUpdate(data);
             }
 
             else if (data.callingOver && data.secondDeal && data.turn == playerID) {
                 if (players[playerID].cards.length == 7 || players[playerID].cards.length == 8) {
-                    update(ref(db, "rooms/" + room), {
-                        secondDeal: false,
-                    })
-                    .catch((error)=>{
-                        alert(error);
-                    });
+                    data.secondDeal = false;
+                    broadcastGameUpdate(data);
                 } else {
                     for (let i = 0; i < 4; i++) {
                         const idx = Math.floor(Math.random() * data.cards.length);
@@ -379,38 +379,32 @@
                         newTurn = playerList[0];
                     }
 
-                    update(ref(db, "rooms/" + room), {
-                        cards: data.cards,
-                        players: data.players,
-                        turn: newTurn,
-                    })
-                    .catch((error)=>{
-                        alert(error);
-                    });
+                    data.cards = data.cards;
+                    data.players = data.players;
+                    data.turn = newTurn;
+
+                    broadcastGameUpdate(data);
                 }
             }
         
             else if (data.callingOver && !data.secondDeal && data.turn == playerID) {
                 if (Object.keys(players).length == middleCards.length) {
                     // Figure out winner, add points, transition turn, alert players
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    setTimeout(() => {
+                        if (data.curWinner == data.caller) {
+                            data.callerPoints += data.curPoints;
+                        }
 
-                    if (data.curWinner == data.caller) {
-                        data.callerPoints += data.curPoints;
-                    }
+                        data.turn = data.curWinner;
+                        data.callerPoints = data.callerPoints;
+                        data.curPoints = 0;
+                        data.curCards = [];
+                        data.curWinner = "";
+                        data.curSuit = "";
+                        data.lastWinner = data.curWinner;
 
-                    update(ref(db, "rooms/" + room), {
-                        turn: data.curWinner,
-                        callerPoints: data.callerPoints,
-                        curPoints: 0,
-                        curCards: [],
-                        curWinner: "",
-                        curSuit: "",
-                        lastWinner: data.curWinner,
-                    })
-                    .catch((error)=>{
-                        alert(error);
-                    });
+                        broadcastGameUpdate(data);
+                    }, 3000);
                 }
 
                 else if (curSuit && !trumpcardRevealed && !hand.some(str => str.includes(curSuit))) {
@@ -449,77 +443,60 @@
         }
 
         function startUpdate(s) {
-            started = s.val();
+            started = s;
 
             if (started == true) {
                 document.getElementById("lobby").classList.add("hidden");
                 document.getElementById("playingTable").classList.remove("hidden");
-                const dbref = ref(db);
+                
+                if (!(gameData.turn == playerID)) {
+                    startUpdate(s);
+                    return;
+                }
+
                 var newHand = [];
+                for (let i = 0; i < 4; i++) {
+                    const idx = Math.floor(Math.random() * gameData.cards.length);
+                    const card = gameData.cards[idx];
 
-                get(child(dbref, "rooms/" + room))
-                .then((snapshot) => {
-                    if(snapshot.exists()){
-                        var data = snapshot.val();
+                    gameData.cards.splice(idx, 1);
+                    newHand.push(card);
+                }
 
-                        if (!(data.turn == playerID)) {
-                            startUpdate(s);
-                            return;
-                        }
+                hand = [...newHand];
+                gameData.players[playerID].cards = hand;
 
-                        for (let i = 0; i < 4; i++) {
-                            const idx = Math.floor(Math.random() * data.cards.length);
-                            const card = data.cards[idx];
+                var newTurn;
+                var playerList = Object.keys(gameData.players);
 
-                            data.cards.splice(idx, 1);
-                            newHand.push(card);
-                        }
+                if (playerList.indexOf(gameData.turn) < playerList.length-1) {
+                    newTurn = playerList[playerList.indexOf(gameData.turn) + 1];
+                } else {
+                    newTurn = playerList[0];
+                }
 
-                        hand = [...newHand];
-                        data.players[playerID].cards = hand;
+                gameData.turn = newTurn;
+                gameData.cards = gameData.cards;
+                gameData.players = gameData.players;
 
-                        var newTurn;
-                        var playerList = Object.keys(data.players);
-
-                        if (playerList.indexOf(data.turn) < playerList.length-1) {
-                            newTurn = playerList[playerList.indexOf(data.turn) + 1];
-                        } else {
-                            newTurn = playerList[0];
-                        }
-
-                        update(ref(db, "rooms/" + room), {
-                            cards: data.cards,
-                            players: data.players,
-                            turn: newTurn,
-                        })
-                        .catch((error)=>{
-                            alert(error);
-                        });
-
-                        for (const ref of listeners) {
-                            off(ref);
-                        }
-
-                        var roomRef = ref(db, "rooms/"+room);
-                        listeners = [roomRef];
-
-                        onValue(roomRef, (snapshot) => updateGame(snapshot), (error) => {
-                            console.error("Error listening to changes:", error);
-                        });
-
-                        drawAllCards();
-                    } else {
-                        alert("Room does not exist");
-                        leaveRoom();
-                    }
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                broadcastGameUpdate(gameData);
+                drawAllCards();
             } else {
                 document.getElementById("lobby").classList.remove("hidden");
                 document.getElementById("playingTable").classList.add("hidden");
             }
+        }
+
+        function broadcastGameUpdate(data) {
+            gameData = data;
+            connections.forEach(conn => {
+                if (conn.open) {
+                    conn.send({
+                        type: 'gameUpdate',
+                        data: data
+                    });
+                }
+            });
         }
 
         function createRoom() {
@@ -533,48 +510,49 @@
 
             const suits = ["spade", "heart", "diamond", "club"];
             const ranks = ["A", "K", "Q", "J", "10", "9"];
-            const cards = {};
+            const cards = []; // Change from {} to []
             let index = 0;
 
             for (const suit of suits) {
                 for (const rank of ranks) {
-                    cards[index] = `${rank} ${suit}`;
-                    index++;
+                    cards.push(`${rank} ${suit}`); // Use push instead of assignment
                 }
             }
 
             playerID = nameIn.value;
+            isHost = true;
 
-            set(ref(db, "rooms/" + roomID),{
-                players: {
-                    [playerID]: {
-                        chips: 0,
-                    }
-                },
-                turn: playerID,
-                trumpcard: "",
-                callPoints: 0,
-                curPoints: 0,
-                callerPoints: 0,
-                curSuit: "",
-                caller: "",
-                cards: cards,
-                curWinner: "",
-                trumpcardRevealed: false,
-                started: false,
-                callingOver: false,
-                lastWinner: "",
-            })
-            .then(()=>{
-                console.log("Room Created");
+            // Create peer with room ID
+            peer = new Peer(roomID);
+
+            peer.on('open', (id) => {
+                console.log('My peer ID is: ' + id);
+                
+                gameData = {
+                    players: {
+                        [playerID]: {
+                            chips: 0,
+                            cards: [], // Initialize empty cards array
+                            peerId: id // Store host's peer ID
+                        }
+                    },
+                    turn: playerID,
+                    trumpcard: "",
+                    callPoints: 0,
+                    curPoints: 0,
+                    callerPoints: 0,
+                    curSuit: "",
+                    caller: "",
+                    cards: cards, // Now cards is an array
+                    curWinner: "",
+                    trumpcardRevealed: false,
+                    started: false,
+                    callingOver: false,
+                    lastWinner: "",
+                };
 
                 room = roomID;
-                playerID = nameIn.value;
-                players = {
-                    playerID: {
-                        chips: 0,
-                    }
-                }
+                players = gameData.players;
 
                 document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
                 document.getElementById("start").classList.add("hidden");
@@ -583,120 +561,155 @@
 
                 var ul = document.getElementById("playerList");
                 var li = document.createElement("li");
-                li.appendChild(document.createTextNode(name.value));
+                li.appendChild(document.createTextNode(playerID));
                 li.setAttribute("id", playerID);
                 ul.appendChild(li);
                 li.classList.add("me");
+            });
 
-                var playersRef = ref(db, "rooms/"+room+"/players");
-
-                onValue(playersRef, (snapshot) => addPlayers(snapshot), (error) => {
-                    console.error("Error listening to changes: ", error);
+            peer.on('connection', (conn) => {
+                console.log('New connection from: ' + conn.peer);
+                connections.push(conn);
+                
+                conn.on('open', () => {
+                    // Send current game state to new player
+                    conn.send({
+                        type: 'gameUpdate',
+                        data: gameData
+                    });
                 });
 
-                var startedRef = ref(db, "rooms/"+room+"/started");
-
-                onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
-                    console.error("Error listening to changes:", error);
+                conn.on('data', (data) => {
+                    handlePeerData(data, conn);
                 });
 
-                listeners.push(playersRef);
-                listeners.push(startedRef);
-            })
-            .catch((error)=>{
-                alert(error);
+                conn.on('close', () => {
+                    console.log('Connection closed: ' + conn.peer);
+                    connections = connections.filter(c => c !== conn);
+                    // Handle player disconnection
+                    handlePlayerDisconnection(conn.peer);
+                });
             });
         }
 
         function joinRoom() {
-            const dbref = ref(db);
-
-            if (code.value == "") {
+            if (codeIn.value == "") {
                 alert("Please enter a code");
                 return;
             }
 
-            get(child(dbref, "rooms/" + codeIn.value))
-            .then((snapshot)=>{
-                if(snapshot.exists()){
-                    var data = snapshot.val();
+            playerID = nameIn.value;
+            room = codeIn.value;
 
-                    for (const name in data.players) {
-                        if (name == nameIn.value) {
-                            alert("Someone in room has the same name");
-                            return;
-                        }
-                    }
+            // Create peer to connect to host
+            peer = new Peer();
 
-                    room = codeIn.value;
-                    playerID = nameIn.value;
-                    data.players[playerID] = {
-                        chips: 0,
-                    }
-                    players = data.players;
-
-                    document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
-                    document.getElementById("start").classList.add("hidden");
-                    document.getElementById("roomCode").classList.remove("hidden");
-                    document.getElementById("lobby").classList.remove("hidden");
-
-                    update(ref(db, "rooms/" + room), {
-                        players: players,
-                    })
-                    .catch((error)=>{
-                        alert(error);
+            peer.on('open', (id) => {
+                console.log('My peer ID is: ' + id);
+                
+                // Connect to host
+                const conn = peer.connect(room);
+                
+                conn.on('open', () => {
+                    console.log('Connected to host');
+                    connections.push(conn);
+                    
+                    // Send join request with peer ID
+                    conn.send({
+                        type: 'joinRequest',
+                        playerID: playerID,
+                        peerId: id // Include peer ID in join request
                     });
+                });
 
-                    var ul = document.getElementById("playerList");
-                    for (const name in players) {
-                        var li = document.createElement("li");
-                        li.appendChild(document.createTextNode(name));
-                        li.setAttribute("id", playerID);
-                        ul.appendChild(li);
+                conn.on('data', (data) => {
+                    handlePeerData(data, conn);
+                });
 
-                        if (name == playerID) {
-                            li.classList.add("me");
-                        }
-                    }
+                conn.on('close', () => {
+                    console.log('Connection to host closed');
+                    alert('Host disconnected');
+                    reset();
+                });
+            });
+        }
 
-                    var playersRef = ref(db, "rooms/"+room+"/players");
-
-                    onValue(playersRef, (snapshot) => addPlayers(snapshot), (error) => {
-                        console.error("Error listening to changes:", error);
+        function handlePeerData(data, conn) {
+            if (data.type === 'gameUpdate') {
+                updateGame(data.data);
+            } else if (data.type === 'joinRequest') {
+                // Host handling new player join
+                if (gameData.players[data.playerID]) {
+                    conn.send({
+                        type: 'joinRejected',
+                        reason: 'Name already taken'
                     });
-
-                    var startedRef = ref(db, "rooms/"+room+"/started");
-
-                    onValue(startedRef, (snapshot) => startUpdate(snapshot), (error) => {
-                        console.error("Error listening to changes:", error);
-                    });
-
-                    listeners.push(playersRef);
-                    listeners.push(startedRef);
-                } else {
-                    alert("No room with entered code");
+                    return;
                 }
-            })
-            .catch((error)=>{
-                alert(error);
-            })
+
+                // Store the peer ID with the player data
+                gameData.players[data.playerID] = {
+                    chips: 0,
+                    cards: [], // Initialize empty cards array
+                    peerId: data.peerId || conn.peer // Use provided peer ID or connection peer ID
+                };
+                players = gameData.players;
+                addPlayers(); // Update UI for new player
+
+                // Broadcast updated player list
+                broadcastGameUpdate(gameData);
+            } else if (data.type === 'joinRejected') {
+                alert(data.reason);
+                reset();
+            }
+        }
+
+        function handlePlayerDisconnection(peerId) {
+            // Find player by peer ID and remove them
+            const disconnectedPlayer = Object.keys(players).find(player => 
+                players[player].peerId === peerId
+            );
+            
+            if (disconnectedPlayer) {
+                delete players[disconnectedPlayer];
+                gameData.players = players;
+                
+                // Notify all remaining players about the disconnection
+                const alerts = document.querySelector("#alerts");
+                const cont = document.createElement("div");
+                cont.id = "playerLeft";
+                cont.innerText = `${disconnectedPlayer} left the game`;
+                alerts.appendChild(cont);
+                
+                // Remove the notification after 3 seconds
+                setTimeout(() => {
+                    if (document.getElementById("playerLeft")) {
+                        document.getElementById("playerLeft").remove();
+                    }
+                }, 3000);
+                
+                // Update the player list in the UI
+                addPlayers();
+                
+                broadcastGameUpdate(gameData);
+            }
         }
 
         function leaveRoom() {
-            delete players[playerID];
-
-            if (Object.keys(players).length === 0) {
-                remove(ref(db, "rooms/" + room))
-                .catch((error)=>{
-                    alert(error);
+            if (isHost) {
+                // Host leaving - close all connections
+                connections.forEach(conn => {
+                    conn.close();
                 });
             } else {
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                })
-                .catch((error)=>{
-                    alert(error);
+                // Client leaving - close connection to host
+                connections.forEach(conn => {
+                    conn.close();
                 });
+            }
+
+            if (peer) {
+                peer.destroy();
             }
 
             reset();
@@ -706,12 +719,48 @@
             started = true;
             console.log(room)
 
-            update(ref(db, "rooms/" + room), {
-                started: true,
-            })
-            .catch((error)=>{
-                alert(error);
-            });
+            gameData.started = true;
+            
+            // Initialize empty cards array for all players
+            for (let player in gameData.players) {
+                if (!gameData.players[player].cards) {
+                    gameData.players[player].cards = [];
+                }
+            }
+            
+            // Deal cards to the first player (host)
+            if (gameData.turn == playerID) {
+                var newHand = [];
+                for (let i = 0; i < 4; i++) {
+                    const idx = Math.floor(Math.random() * gameData.cards.length);
+                    const card = gameData.cards[idx];
+
+                    gameData.cards.splice(idx, 1);
+                    newHand.push(card);
+                }
+
+                hand = [...newHand];
+                gameData.players[playerID].cards = hand;
+
+                var newTurn;
+                var playerList = Object.keys(gameData.players);
+
+                if (playerList.indexOf(gameData.turn) < playerList.length-1) {
+                    newTurn = playerList[playerList.indexOf(gameData.turn) + 1];
+                } else {
+                    newTurn = playerList[0];
+                }
+
+                gameData.turn = newTurn;
+                gameData.cards = gameData.cards;
+                gameData.players = gameData.players;
+            }
+            
+            // Transition to playing screen for all players
+            document.getElementById("lobby").classList.add("hidden");
+            document.getElementById("playingTable").classList.remove("hidden");
+            
+            broadcastGameUpdate(gameData);
         }
 
         function drawAllCards(onMove=null) {
@@ -838,15 +887,11 @@
                 newTurn = playerList[0];
             }
 
-            update(ref(db, "rooms/" + room), {
-                callPoints: value,
-                caller: playerID,
-                turn: newTurn,
-            })
-            .catch((error)=>{
-                alert(error);
-            });
+            gameData.callPoints = value;
+            gameData.caller = playerID;
+            gameData.turn = newTurn;
 
+            broadcastGameUpdate(gameData);
             document.getElementById("bidContainer").remove();
         }
 
@@ -861,13 +906,8 @@
                 newTurn = playerList[0];
             }
 
-            update(ref(db, "rooms/" + room), {
-                turn: newTurn,
-            })
-            .catch((error)=>{
-                alert(error);
-            });
-
+            gameData.turn = newTurn;
+            broadcastGameUpdate(gameData);
             document.getElementById("bidContainer").remove();
         }
 
@@ -875,15 +915,12 @@
             players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
             document.getElementById("selectTrump").remove();
 
-            update(ref(db, "rooms/" + room), {
-                players: players,
-                trumpcard: c,
-                secondDeal: true,
-                callingOver: true,
-            })
-            .catch((error)=>{
-                alert(error);
-            });
+            gameData.players = players;
+            gameData.trumpcard = c;
+            gameData.secondDeal = true;
+            gameData.callingOver = true;
+
+            broadcastGameUpdate(gameData);
         }
 
         function playCardNoTrump(c) {
@@ -912,18 +949,14 @@
 
                 middleCards.push(c);
                 
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                    curCards: middleCards,
-                    curPoints: curPoints,
-                    curWinner: playerID,
-                    curSuit: suit,
-                    turn: newTurn,
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                gameData.players = players;
+                gameData.curCards = middleCards;
+                gameData.curPoints = curPoints;
+                gameData.curWinner = playerID;
+                gameData.curSuit = suit;
+                gameData.turn = newTurn;
 
+                broadcastGameUpdate(gameData);
                 return;
             }
 
@@ -961,27 +994,16 @@
 
             middleCards.push(c);
 
+            gameData.players = players;
+            gameData.curCards = middleCards;
+            gameData.curPoints = curPoints;
+            gameData.turn = newTurn;
+
             if (!newCurWinner) {
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                    curCards: middleCards,
-                    curPoints: curPoints,
-                    turn: newTurn,
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                broadcastGameUpdate(gameData);
             } else {
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                    curCards: middleCards,
-                    curPoints: curPoints,
-                    curWinner: playerID,
-                    turn: newTurn,
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                gameData.curWinner = playerID;
+                broadcastGameUpdate(gameData);
             }
         }
 
@@ -1011,18 +1033,14 @@
 
                 middleCards.push(c);
                 
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                    curCards: middleCards,
-                    curPoints: curPoints,
-                    curWinner: playerID,
-                    curSuit: suit,
-                    turn: newTurn,
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                gameData.players = players;
+                gameData.curCards = middleCards;
+                gameData.curPoints = curPoints;
+                gameData.curWinner = playerID;
+                gameData.curSuit = suit;
+                gameData.turn = newTurn;
 
+                broadcastGameUpdate(gameData);
                 return;
             }
 
@@ -1070,41 +1088,26 @@
 
             middleCards.push(c);
 
+            gameData.players = players;
+            gameData.curCards = middleCards;
+            gameData.curPoints = curPoints;
+            gameData.turn = newTurn;
+
             if (!newCurWinner) {
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                    curCards: middleCards,
-                    curPoints: curPoints,
-                    turn: newTurn,
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                broadcastGameUpdate(gameData);
             } else {
-                update(ref(db, "rooms/" + room), {
-                    players: players,
-                    curCards: middleCards,
-                    curPoints: curPoints,
-                    curWinner: playerID,
-                    turn: newTurn,
-                })
-                .catch((error)=>{
-                    alert(error);
-                });
+                gameData.curWinner = playerID;
+                broadcastGameUpdate(gameData);
             }
         }
 
         function showTrumpCard() {
             players[caller].cards.push(trumpcard);
 
-            update(ref(db, "rooms/" + room), {
-                trumpcardRevealed: true,
-                players: players,
-            })
-            .catch((error)=>{
-                alert(error);
-            });
+            gameData.trumpcardRevealed = true;
+            gameData.players = players;
 
+            broadcastGameUpdate(gameData);
             document.getElementById("reveal").remove();
         }
 
