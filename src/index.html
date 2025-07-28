@@ -17,8 +17,8 @@
     <body class="body-content">
         <div class="container" id="start">
             <h1>28</h1>
-            <input type="text" placeholder="Name" id="name"/>
-            <input type="text" placeholder="Room Code" id="code"/>
+            <input type="text" placeholder="Name" id="name" maxlength="20"/>
+            <input type="text" placeholder="Room Code" id="code" maxlength="5" pattern="[A-Z0-9]{5}"/>
             <button id="join">Join Room</button>
             <button id="create">Create Room</button>
         </div>
@@ -86,6 +86,17 @@
         var gameData = {};
 
         const cardOrder = ["7", "8", "Q", "K", "10", "A", "9", "J"];
+
+        // Fixed: Proper card parsing function
+        function parseCard(cardStr) {
+            // Handle cards like "10 spade" correctly
+            const parts = cardStr.split(' ');
+            if (parts.length < 2) return { value: '', suit: '' };
+            
+            const suit = parts.pop();
+            const value = parts.join(' ');
+            return { value, suit };
+        }
 
         function reset() {
             room = null;
@@ -158,6 +169,14 @@
         }
 
         function updateGame(data) {
+            if (!data) return;
+
+            // Fixed: Validate game data structure
+            if (!data.players || !data.cards) {
+                console.error("Invalid game data received");
+                return;
+            }
+
             if ("curCards" in data) {
                 middleCards = data.curCards;
             } else {
@@ -172,7 +191,7 @@
 
             players = data.players;
             
-            // Handle initial join - move to lobby if not already there
+            // Handle initial join
             if (!isHost && document.getElementById("start").classList.contains("hidden") === false) {
                 document.getElementById("roomCode").innerHTML = `Room Code: ${room}`;
                 document.getElementById("start").classList.add("hidden");
@@ -180,40 +199,45 @@
                 document.getElementById("lobby").classList.remove("hidden");
             }
             
-            addPlayers(); // Update the UI
+            addPlayers();
             
-            // Check if game just started - handle transition for all players
             if (data.started && !started) {
-                // Transition to playing screen for all players
                 document.getElementById("lobby").classList.add("hidden");
                 document.getElementById("playingTable").classList.remove("hidden");
             }
             
+            if (!data.started && started) {
+                document.getElementById("playingTable").classList.add("hidden");
+                document.getElementById("lobby").classList.remove("hidden");
+            }
+            
             started = data.started;
             
-            callPoints = data.callPoints;
-            trumpcardRevealed = data.trumpcardRevealed;
-            curPoints = data.curPoints;
-            curSuit = data.curSuit;
-            caller = data.caller;
-            trumpcard = data.trumpcard;
+            callPoints = data.callPoints || 0;
+            trumpcardRevealed = data.trumpcardRevealed || false;
+            curPoints = data.curPoints || 0;
+            curSuit = data.curSuit || "";
+            caller = data.caller || "";
+            trumpcard = data.trumpcard || "";
 
             if (data.lastWinner) {
-                if (document.getElementById("lastWinner")) { document.getElementById("lastWinner").remove(); }
+                if (document.getElementById("lastWinner")) { 
+                    document.getElementById("lastWinner").remove(); 
+                }
                 
                 const alerts = document.querySelector("#alerts");
                 const cont = document.createElement("div");
                 cont.id = "lastWinner";
-                cont.innerText = `${data.lastWinner} won last btw`;
+                cont.innerText = `${data.lastWinner} won last round`;
                 alerts.appendChild(cont);
             }
 
             drawAllCards();
 
-            // Handle card dealing when game starts
-            if (data.started && data.turn == playerID && (!data.players[playerID].cards || data.players[playerID].cards.length === 0) && data.cards && data.cards.length > 0) {
+            if (data.started && data.turn == playerID && (!data.players[playerID].cards || data.players[playerID].cards.length === 0) && data.cards && data.cards.length >= 4) {
                 var newHand = [];
                 for (let i = 0; i < 4; i++) {
+                    if (data.cards.length === 0) break;
                     const idx = Math.floor(Math.random() * data.cards.length);
                     const card = data.cards[idx];
 
@@ -240,8 +264,39 @@
                 broadcastGameUpdate(data);
                 drawAllCards();
             }
+            
+            else if (data.started && data.turn && !data.players[data.turn]) {
+                var playerList = Object.keys(data.players);
+                var currentIndex = playerList.indexOf(data.turn);
+                var newTurn;
+                
+                if (currentIndex >= 0 && currentIndex < playerList.length - 1) {
+                    newTurn = playerList[currentIndex + 1];
+                } else {
+                    newTurn = playerList[0];
+                }
+                
+                data.turn = newTurn;
+                broadcastGameUpdate(data);
+            }
+            
+            else if (data.started && Object.keys(data.players).length < 2) {
+                data.started = false;
+                data.callingOver = false;
+                data.secondDeal = false;
+                
+                document.getElementById("playingTable").classList.add("hidden");
+                document.getElementById("lobby").classList.remove("hidden");
+                
+                const alerts = document.querySelector("#alerts");
+                while(alerts.firstChild) {
+                    alerts.removeChild(alerts.firstChild);
+                }
+                
+                broadcastGameUpdate(data);
+            }
 
-            else if (!data.callingOver && !data.secondDeal) {
+            else if (!data.callingOver && !data.secondDeal && data.started) {
                 if (document.getElementById("bidInfo")) {
                     document.getElementById("bidInfo").remove();
                 }
@@ -249,12 +304,15 @@
                 const alerts = document.querySelector("#alerts");
                 const cont = document.createElement("div");
                 cont.id = "bidInfo";
-                cont.innerText = `Caller: ${data.caller} Bid: ${data.callPoints}`;
+                if (data.caller) {
+                    cont.innerText = `Caller: ${data.caller} Bid: ${data.callPoints}`;
+                } else {
+                    cont.innerText = "Bidding Phase - No caller yet";
+                }
                 alerts.appendChild(cont);
 
-                if (data.turn == data.caller && data.turn == playerID) {
+                if (data.caller && data.turn == data.caller && data.turn == playerID) {
                     drawAllCards(submitTrumpCard);
-                    console.log(data.callingOver);
                     
                     const trumpCont = document.createElement("div");
                     trumpCont.id = "selectTrump";
@@ -296,23 +354,20 @@
             }
             
             else if (data.callingOver && !data.secondDeal && data.turn == playerID && Object.values(players).every(player => Array.isArray(player.cards) && player.cards.length === 0)) {
-                // Game over, did caller win, distribute winnings, reset game for another one
                 var callerWin = (data.curPoints >= data.callPoints);
 
                 if (callerWin) {
                     players[data.caller].chips += Object.keys(players).length-1;
                     
                     for (let player in players) {
-                        if (player == data.caller) { continue; }
-
+                        if (player == data.caller) continue;
                         players[player].chips--;
                     }
                 } else {
                     players[data.caller].chips -= Object.keys(players).length-1;
                     
                     for (let player in players) {
-                        if (player == data.caller) { continue; }
-
+                        if (player == data.caller) continue;
                         players[player].chips++;
                     }
                 }
@@ -327,13 +382,12 @@
 
                 const suits = ["spade", "heart", "diamond", "club"];
                 const ranks = ["A", "K", "Q", "J", "10", "9"];
-                const cards = {};
+                const cards = [];
                 let index = 0;
 
                 for (const suit of suits) {
                     for (const rank of ranks) {
-                        cards[index] = `${rank} ${suit}`;
-                        index++;
+                        cards.push(`${rank} ${suit}`);
                     }
                 }
 
@@ -353,6 +407,14 @@
                 data.secondDeal = false;
                 data.lastWinner = "";
 
+                document.getElementById("playingTable").classList.add("hidden");
+                document.getElementById("lobby").classList.remove("hidden");
+                
+                const alerts = document.querySelector("#alerts");
+                while(alerts.firstChild) {
+                    alerts.removeChild(alerts.firstChild);
+                }
+
                 broadcastGameUpdate(data);
             }
 
@@ -362,6 +424,7 @@
                     broadcastGameUpdate(data);
                 } else {
                     for (let i = 0; i < 4; i++) {
+                        if (data.cards.length === 0) break;
                         const idx = Math.floor(Math.random() * data.cards.length);
                         const card = data.cards[idx];
 
@@ -389,7 +452,6 @@
         
             else if (data.callingOver && !data.secondDeal && data.turn == playerID) {
                 if (Object.keys(players).length == middleCards.length) {
-                    // Figure out winner, add points, transition turn, alert players
                     setTimeout(() => {
                         if (data.curWinner == data.caller) {
                             data.callerPoints += data.curPoints;
@@ -407,7 +469,10 @@
                     }, 3000);
                 }
 
-                else if (curSuit && !trumpcardRevealed && !hand.some(str => str.includes(curSuit))) {
+                else if (curSuit && !trumpcardRevealed && !hand.some(card => {
+                    const { suit } = parseCard(card);
+                    return suit === curSuit;
+                })) {
                     const alerts = document.querySelector("#alerts");
                     const cont = document.createElement("div");
 
@@ -500,6 +565,7 @@
         }
 
         function createRoom() {
+            document.getElementById("create").disabled = true;
             const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             let roomID = "";
             const charactersLength = characters.length;
@@ -593,6 +659,7 @@
         }
 
         function joinRoom() {
+            document.getElementById("join").disabled = true;
             if (codeIn.value == "") {
                 alert("Please enter a code");
                 return;
@@ -632,6 +699,7 @@
                     reset();
                 });
             });
+            document.getElementById("create").disabled = false;
         }
 
         function handlePeerData(data, conn) {
@@ -643,6 +711,15 @@
                     conn.send({
                         type: 'joinRejected',
                         reason: 'Name already taken'
+                    });
+                    return;
+                }
+                
+                // Check if game is already in progress
+                if (gameData.started) {
+                    conn.send({
+                        type: 'joinRejected',
+                        reason: 'Game already in progress'
                     });
                     return;
                 }
@@ -673,6 +750,14 @@
             if (disconnectedPlayer) {
                 delete players[disconnectedPlayer];
                 gameData.players = players;
+                
+                // Check if the host left
+                if (disconnectedPlayer === Object.keys(players)[0]) {
+                    // Host left, end the game for all players
+                    alert('Host left the game. Returning to lobby.');
+                    reset();
+                    return;
+                }
                 
                 // Notify all remaining players about the disconnection
                 const alerts = document.querySelector("#alerts");
@@ -889,8 +974,10 @@
 
             gameData.callPoints = value;
             gameData.caller = playerID;
+            gameData.callingOver = true; // Mark bidding phase as complete
             gameData.turn = newTurn;
 
+            console.log("Bid submitted:", value, "by", playerID, "callingOver:", gameData.callingOver);
             broadcastGameUpdate(gameData);
             document.getElementById("bidContainer").remove();
         }
@@ -907,6 +994,25 @@
             }
 
             gameData.turn = newTurn;
+            
+            // Check if we've gone through all players and no one has bid
+            if (newTurn === playerList[0] && !gameData.caller) {
+                // Everyone skipped, end the game and reset
+                gameData.started = false;
+                gameData.callingOver = false;
+                gameData.secondDeal = false;
+                
+                // Transition back to lobby for all players
+                document.getElementById("playingTable").classList.add("hidden");
+                document.getElementById("lobby").classList.remove("hidden");
+                
+                // Clear any remaining UI elements
+                const alerts = document.querySelector("#alerts");
+                while(alerts.firstChild) {
+                    alerts.removeChild(alerts.firstChild);
+                }
+            }
+            
             broadcastGameUpdate(gameData);
             document.getElementById("bidContainer").remove();
         }
@@ -919,6 +1025,7 @@
             gameData.trumpcard = c;
             gameData.secondDeal = true;
             gameData.callingOver = true;
+            gameData.turn = gameData.caller; // Set turn to caller to start trick-taking
 
             broadcastGameUpdate(gameData);
         }
@@ -1021,7 +1128,7 @@
                 players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
                 document.getElementById("turnInfo").remove();
             
-                var [value, suit] = c.split(" ");
+                const { value, suit } = parseCard(c);
 
                 if (value == "A" || value == "10") {
                     curPoints++;
@@ -1044,16 +1151,19 @@
                 return;
             }
 
-            var [value, suit] = c.split(" ");
+            const { value, suit } = parseCard(c);
+            const { suit: trumpSuit } = parseCard(trumpcard);
 
-            if (hand.some(str => str.includes(curSuit)) && suit != curSuit) {
+            // Fixed: Proper suit checking
+            if (hand.some(card => {
+                const { suit: cardSuit } = parseCard(card);
+                return cardSuit === curSuit;
+            }) && suit !== curSuit) {
                 return;
             }
 
             players[playerID].cards.splice(players[playerID].cards.indexOf(c), 1);
             document.getElementById("turnInfo").remove();
-
-            var [tvalue, tsuit] = trumpcard.split(" ");
 
             if (value == "A" || value == "10") {
                 curPoints++;
@@ -1064,23 +1174,22 @@
             }
 
             var newCurWinner = true;
-            var trumpSuit = (suit == tsuit);
+            var isTrumpCard = (suit === trumpSuit);
 
             for (var i = 0; i < middleCards.length; i++) {
-                var card = middleCards[i];
-                var [cvalue, csuit] = card.split(" ");
+                const { value: cvalue, suit: csuit } = parseCard(middleCards[i]);
 
-                if (trumpSuit && csuit == tsuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
+                if (isTrumpCard && csuit === trumpSuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
                     newCurWinner = false;
                     break;
                 }
                 
-                else if (!trumpSuit && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value)) {
+                else if (!isTrumpCard && cardOrder.indexOf(cvalue) > cardOrder.indexOf(value) && csuit !== trumpSuit) {
                     newCurWinner = false;
                     break;
                 }
                  
-                else if (!trumpSuit && csuit == tsuit) {
+                else if (!isTrumpCard && csuit === trumpSuit) {
                     newCurWinner = false;
                     break;
                 }
